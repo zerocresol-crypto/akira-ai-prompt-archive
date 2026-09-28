@@ -1,0 +1,12 @@
+{
+  "name": "akira-ai-prompt-archive",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:local": "wrangler d1 migrations apply prompt-archive --local",
+    "db:remote": "wrangler d1 migrations apply prompt-archive --remote"
+  },
+  "devDependencies": { "wrangler": "^4.0.0" }
+}
