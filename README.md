@@ -45,3 +45,9 @@ D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトーク
 ## 確認
 
 `npm test` はSQLiteの一時DBでシリーズ→日→カットの登録、下書き非公開、署名済みAccess JWTの検証、タグ検索、無効なタグの拒否を確認する。テストで使う鍵とメールは一時的なダミー値で、実運用の認証情報ではない。
+
+## 日別のまとめ登録
+
+管理画面でシリーズと日別ページを作り、日別ページの「まとめて取り込む」からJSONを貼り付ける。日曜〜金曜は最大6件、総集編は最大3件。各カットは `slot` (`morning` / `evening`、総集編は `recap`)、`cut_number` (1〜3)、`title`、`positive_prompt` が必須。`negative_prompt`、`description`、`aspect_ratio`、`image_url`、`model_name`、`notes`、`tags` は任意。`tags` は `season:autumn:秋` のような文字列の配列にする。
+
+登録したカットはすべて**下書き**になる。既存の時間帯とCut番号があればバッチ全体を取り消し、既存データを上書きしない。登録後に各カットの画像と説明を確認してから公開状態に切り替える。
