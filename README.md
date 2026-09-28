@@ -28,7 +28,7 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 開発
 
-`npm install` → D1とR2バケット `prompt-archive-images` を作成して `wrangler.jsonc` のD1 IDを置換 → `npm run db:local` → `npm run dev`。本番へのマイグレーションは `npm run db:remote`、デプロイは `npm run deploy`。登録データがない状態では空状態を表示します。
+`npm install` → D1を作成して `wrangler.jsonc` にIDを設定 → `npm run db:local` → `npm run dev`。本番へのマイグレーションは `npm run db:remote`、デプロイは `npm run deploy`。登録データがない状態では空状態を表示します。
 
 ## 管理画面の接続
 
@@ -55,7 +55,7 @@ D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトーク
 
 ## 画像の登録
 
-R2バケット `prompt-archive-images` を新規作成して `IMAGES` にバインドする。管理画面のカット編集からJPEG、PNG、WebP（8MB以下）をアップロードすると、ランダムなキーの `/media/art/...` に保存してカットへ紐付ける。画像の形式はファイル名ではなくバイナリ先頭でも確認する。公開画像は同じWorker経由で配信し、OGPでも使う。既存画像の入れ替え時に古い画像を自動削除しないため、将来の保守時に未参照オブジェクトを確認して整理する。
+R2が有効なアカウントでは専用バケット `prompt-archive-images` を作成して `IMAGES` にバインドできる。R2未設定時はHTTPSの画像URLを管理画面で登録する。R2を設定した場合、カット編集からJPEG、PNG、WebP（8MB以下）をアップロードすると、ランダムなキーの `/media/art/...` に保存してカットへ紐付ける。画像の形式はファイル名ではなくバイナリ先頭でも確認する。公開画像は同じWorker経由で配信し、OGPでも使う。既存画像の入れ替え時に古い画像を自動削除しないため、将来の保守時に未参照オブジェクトを確認して整理する。
 
 ## 最初のシリーズ
 
