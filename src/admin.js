@@ -1,3 +1,4 @@
+import { uploadImage } from './images.js';
 import { template, importDrafts } from './import.js';
 const esc = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const opts = (items, value) => items.map(([key,name]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(name)}</option>`).join('');
@@ -54,12 +55,21 @@ export async function admin(request,env,parts) {
   if(!['GET','POST'].includes(request.method))return deny('Method Not Allowed',405);
   if(request.method==='POST') {
     if(new URL(request.url).origin!==request.headers.get('Origin'))return deny('Origin mismatch',403);
-    const length=Number(request.headers.get('content-length')||0);if(length>120000)return deny('入力が長すぎます',413);
+    const isUpload=parts[1]==='series'&&parts[3]==='days'&&parts[5]==='prompts'&&parts[6]==='edit'&&parts[8]==='image'&&parts.length===9;
+    const length=Number(request.headers.get('content-length')||0);if(length>(isUpload?9*1024*1024:120000))return deny('入力が長すぎます',413);
     if(!request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded') && !request.headers.get('content-type')?.startsWith('multipart/form-data'))return deny('Content-Type mismatch',415);
     let data;try{data=await request.formData()}catch{return deny('入力を読み取れません',400)}
     const v=k=>String(data.get(k)||'').trim();
-    if([...data].reduce((n,[k,val])=>n+k.length+String(val).length,0)>120000)return deny('入力が長すぎます',413);
+    if(!isUpload&&[...data].reduce((n,[k,val])=>n+k.length+String(val).length,0)>120000)return deny('入力が長すぎます',413);
     try {
+      if(isUpload){
+        const p=await env.DB.prepare('SELECT p.id FROM prompts p JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE p.id=? AND d.slug=? AND s.slug=?').bind(parts[7],parts[4],parts[2]).first();
+        if(!p)return deny('Not Found',404);
+        const imageUrl=await uploadImage(env.IMAGES,data.get('image'));
+        try{await env.DB.prepare('UPDATE prompts SET image_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(imageUrl,p.id).run()}
+        catch(error){await env.IMAGES.delete(imageUrl.slice('/media/'.length));throw error}
+        return redirect(`/admin/series/${encodeURIComponent(parts[2])}/days/${encodeURIComponent(parts[4])}/prompts/edit/${p.id}`);
+      }
       if(parts[1]==='series' && ['new','edit'].includes(parts[2]) && parts.length===(parts[2]==='edit'?4:3)) {
         if(!validSlug(v('slug'))||!v('title')||v('title').length>200||!validUrl(v('cover_url'))||!validDate(v('start_date'))||!validDate(v('end_date'))||!['draft','published'].includes(v('status')))throw Error('シリーズの入力を確認してください');
         if(parts[2]==='new'){await env.DB.prepare('INSERT INTO series(slug,title,concept,cover_url,start_date,end_date,status) VALUES(?,?,?,?,?,?,?)').bind(v('slug'),v('title'),v('concept'),v('cover_url')||null,v('start_date')||null,v('end_date')||null,v('status')).run();return redirect('/admin/series/'+encodeURIComponent(v('slug')))}
@@ -104,6 +114,6 @@ export async function admin(request,env,parts) {
   if(parts.length===5){const prompts=await env.DB.prepare('SELECT * FROM prompts WHERE day_id=? ORDER BY slot,cut_number').bind(d.id).all();return frame(`${s.title} / ${d.title}`,`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/edit/${d.id}">日を編集</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/new">カットを追加</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/import">まとめて取り込む</a></section>${prompts.results.map(p=>`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/edit/${p.id}">${esc(p.slot)} Cut ${p.cut_number}：${esc(p.title)}</a> <small>${esc(p.status)}</small></section>`).join('')}`)}
   if(parts[5]==='import'&&parts.length===6)return frame('カットをまとめて取り込む',`<section><p>この日に最大${d.day_order===6?3:6}カットをJSONで登録します。すべて下書きになり、既存のCut番号は上書きしません。登録後に各カットを確認して公開してください。</p><small>同じCut番号が既にある場合は取り込み全体が失敗します。</small></section><form method="post"><label>カットのJSON<textarea name="json" rows="24" required>${esc(template)}</textarea></label><button>下書きとして取り込む</button></form>`);
   if(parts[5]==='prompts'&&parts[6]==='new'&&parts.length===7)return frame('カット作成',`<form method="post">${promptFields()}<button>保存</button></form>`);
-  if(parts[5]==='prompts'&&parts[6]==='edit'&&parts.length===8){const p=await env.DB.prepare('SELECT * FROM prompts WHERE id=? AND day_id=?').bind(parts[7],d.id).first();if(!p)return deny('Not Found',404);const tags=await env.DB.prepare('SELECT t.* FROM tags t JOIN prompt_tags pt ON pt.tag_id=t.id WHERE pt.prompt_id=? ORDER BY t.category,t.slug').bind(p.id).all();p.tags=tags.results.map(t=>`${t.category}:${t.slug}:${t.name}`).join('\n');return frame('カット編集',`<form method="post">${promptFields(p)}<button>保存</button></form>`)}
+  if(parts[5]==='prompts'&&parts[6]==='edit'&&parts.length===8){const p=await env.DB.prepare('SELECT * FROM prompts WHERE id=? AND day_id=?').bind(parts[7],d.id).first();if(!p)return deny('Not Found',404);const tags=await env.DB.prepare('SELECT t.* FROM tags t JOIN prompt_tags pt ON pt.tag_id=t.id WHERE pt.prompt_id=? ORDER BY t.category,t.slug').bind(p.id).all();p.tags=tags.results.map(t=>`${t.category}:${t.slug}:${t.name}`).join('\n');return frame('カット編集',`${p.image_url?`<section><img src="${esc(p.image_url)}" alt="登録済み画像" style="max-width:100%;max-height:320px"></section>`:''}<section><form method="post" action="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/edit/${p.id}/image" enctype="multipart/form-data"><label>画像ファイル（JPEG、PNG、WebP、8MB以下）<input type="file" name="image" accept="image/jpeg,image/png,image/webp" required></label><button>画像を登録</button></form></section><form method="post">${promptFields(p)}<button>保存</button></form>`)}
   return deny('Not Found',404);
 }
