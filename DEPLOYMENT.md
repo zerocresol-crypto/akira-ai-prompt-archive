@@ -61,7 +61,7 @@ npm run deploy
 npm run deploy:admin
 ```
 
-管理WorkerのURLは `https://akira-ai-prompt-archive-admin.zero-cresol.workers.dev/` になる想定。初回は未設定のため `/admin` が403になる。この状態でCloudflareダッシュボードの **Workers & Pages → akira-ai-prompt-archive-admin → Settings → Domains & Routes → workers.dev → Enable Cloudflare Access** に進み、**管理Workerのproduction URLだけ**を保護する。管理者のメールアドレスだけを許可する。公開Worker `akira-ai-prompt-archive` にAccessを設定しない。
+管理WorkerのURLは `https://akira-ai-prompt-archive-admin.zero-cresol.workers.dev/` になる想定。初回は未設定のため `/admin` が403になる。この状態でCloudflareダッシュボードの **Workers & Pages → akira-ai-prompt-archive-admin → Access** に進み、**管理Workerのproduction URLだけ**を保護する。管理者のメールアドレスだけを許可する。公開Worker `akira-ai-prompt-archive` にAccessを設定しない。
 
 AccessアプリケーションのAudience (AUD) Tag とチームドメインを確認し、管理Workerに必要な3値を登録する。値は実際の環境に合わせてCLIの対話入力欄へ入力する（コマンドやGitHubへ値を直書きしない）。
 
