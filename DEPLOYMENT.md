@@ -48,27 +48,23 @@ D1 `prompt-archive` の作成と実UUIDの設定は完了。R2は有効化され
 
 CloudflareダッシュボードからR2を有効化した後、`npx wrangler r2 bucket create prompt-archive-images` を実行する。`wrangler.jsonc` に `"r2_buckets": [{"binding":"IMAGES","bucket_name":"prompt-archive-images"}]` を追加して再デプロイすると、管理画面の画像アップロードが使用できる。R2の有効化に課金情報の入力が必要な場合は、Cloudflareの条件を確認してから判断する。
 
-## 管理画面を有効化する
+## 管理画面を有効化する（Zero Trust登録不要）
 
-公開Workerの `workers.dev` にAccessを有効化すると、閲覧者もログインを求められる。代わりに**管理専用Worker**を使う。公開Worker `/admin` は404、管理Workerでは管理ルート以外を404にする。両WorkerはPrompt Archive専用の同じD1を参照する。
-
-リポジトリの最新版を取得して、次を実行する。
+公開Worker `/admin` は404、管理専用Workerでは管理画面以外を404にする。両方ともPrompt Archive専用の同じD1を参照する。管理Workerは64文字のランダムな16進パスワードをCloudflare Worker Secretで検証する。Zero Trust Freeの決済情報登録は不要。
 
 ```powershell
 git pull
 npm test
-npm run deploy
 npm run deploy:admin
 ```
 
-管理WorkerのURLは `https://akira-ai-prompt-archive-admin.zero-cresol.workers.dev/`。初回は未設定のため `/admin` が403になる。Accessタブに「このアカウントのZero Trustを設定する」と出る場合、先にCloudflareアカウントのZero Trust組織を初期設定する（チーム名とプランを選ぶ）。設定後、**Workers & Pages → akira-ai-prompt-archive-admin → Access** に戻り、**管理Workerのproduction URLだけ**を保護する。管理者のメールアドレスだけを許可する。公開Worker `akira-ai-prompt-archive` にAccessを設定しない。
-
-AccessアプリケーションのAudience (AUD) Tag とチームドメインを確認し、管理Workerに必要な3値を登録する。値は実際の環境に合わせてCLIの対話入力欄へ入力する（コマンドやGitHubへ値を直書きしない）。
+自分のPCで次のコマンドを実行してパスワードを作成し、**パスワード管理ツールへ保存**する。値を会話・GitHub・スクリーンショットへ載せない。
 
 ```powershell
-npx wrangler secret put ACCESS_TEAM_DOMAIN --config wrangler.admin.jsonc
-npx wrangler secret put ACCESS_AUD --config wrangler.admin.jsonc
-npx wrangler secret put ADMIN_EMAIL --config wrangler.admin.jsonc
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
+npx wrangler secret put ADMIN_PASSWORD --config wrangler.admin.jsonc
 ```
 
-`ACCESS_TEAM_DOMAIN` は `https://<team>.cloudflareaccess.com` の形、`ACCESS_AUD` は管理WorkerのAccessアプリケーションのAUDタグ、`ADMIN_EMAIL` は許可した管理者メール。3値が揃わない場合、Workerは管理画面へのアクセスを拒否する。設定後に管理Worker `/admin` を開き、認証できることを確認する。公開Workerのトップとシリーズ一覧はログインなしで開けることを別ウィンドウでも確認する。
+2行目の対話入力欄に、生成した64文字を貼り付ける。Worker Secretは公開リポジトリや設定ファイルへ書かない。設定後、`https://akira-ai-prompt-archive-admin.zero-cresol.workers.dev/admin` を開く。ブラウザーの認証ダイアログに**ユーザー名 `admin`** と保存したパスワードを入力する。一般公開サイト `https://akira-ai-prompt-archive.zero-cresol.workers.dev/` はログイン不要のまま開く。
+
+パスワードを紛失した場合は新たに生成して `ADMIN_PASSWORD` Secretを上書きする。以前のパスワードは使えなくなる。Zero Trustを後から導入する場合も管理Workerのみを保護し、公開Workerに設定しない。
