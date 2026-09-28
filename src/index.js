@@ -1,3 +1,4 @@
+import { serveImage } from './images.js';
 import { admin } from './admin.js';
 const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const enc = encodeURIComponent;
@@ -20,6 +21,7 @@ export default { async fetch(request, env) {
   try {
     const parts = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
     if (parts[0] === 'admin') return admin(request,env,parts);
+    if (parts[0] === 'media') { if (!['GET','HEAD'].includes(request.method)) return new Response('Method Not Allowed',{status:405}); return serveImage(request,env.IMAGES,parts.slice(1).join('/')); }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method Not Allowed', { status: 405 });
     if (!parts.length) {
       const [series, recent, tags] = await Promise.all([
