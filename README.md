@@ -29,3 +29,15 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 ## 開発
 
 `npm install` → D1を作成して `wrangler.jsonc` のIDを置換 → `npm run db:local` → `npm run dev`。本番へのマイグレーションは `npm run db:remote`、デプロイは `npm run deploy`。登録データがない状態では空状態を表示します。
+
+## 管理画面の接続
+
+`/admin` はCloudflare Accessのアプリケーションで保護する。さらにWorker内でAccess JWTの署名、issuer、AUD、有効期限、管理者メールを確認する。次の環境変数が揃うまでは403を返す。
+
+- `ACCESS_TEAM_DOMAIN`：`https://<team>.cloudflareaccess.com`
+- `ACCESS_AUD`：AccessアプリケーションのAudienceタグ
+- `ADMIN_EMAIL`：登録作業を許可するメールアドレス
+
+Accessポリシーで同じ管理者メールのみ許可する。**管理者画面を保護したAccessアプリケーションをWorkersの公開ホスト全体に適用しないこと**。公開画面は誰でも閲覧できる必要があるため、管理用ホスト名を分けて同じWorkerへルーティングするか、`/admin*` のみにポリシーを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像は現段階ではHTTPSの画像URLを入力する（R2への直接アップロードは後続工程）。タグは `season:autumn:秋` のように1行1件で入力する。
+
+D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトークンが必要。未接続の環境ではDB IDの置換、remote migration、deployは実行できない。公開前に実データ登録とスマートフォンでの表示確認を行う。
