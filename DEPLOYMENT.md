@@ -24,11 +24,11 @@ R2は現在のアカウントで未有効化（Cloudflareエラー10042）のた
 ```powershell
 npm run check:deploy
 npm run db:local
-npm run db:remote -- --yes
+npm run db:remote
 npm run db:verify
 ```
 
-`db:verify` に `series`、`days`、`prompts`、`tags`、`prompt_tags` が表示されるまでWorkerの確認へ進まない。マイグレーションは `0001`（スキーマ）と `0002`（Autumn Café Collectionの下書き）を適用する。`--remote` の対象が専用DBであることを確認する。データや画像がまだない段階ではサイトは空状態になる。
+確認プロンプトが出たら適用対象のDB名と2件のマイグレーションを見て承認する。`db:verify` に `series`、`days`、`prompts`、`tags`、`prompt_tags` が表示されるまでWorkerの確認へ進まない。マイグレーションは `0001`（スキーマ）と `0002`（Autumn Café Collectionの下書き）を適用する。`--remote` の対象が専用DBであることを確認する。データや画像がまだない段階ではサイトは空状態になる。
 
 ## 3. Worker
 
