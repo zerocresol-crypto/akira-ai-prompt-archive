@@ -2,7 +2,8 @@
   "name": "akira-ai-prompt-archive-admin",
   "main": "src/index.js",
   "vars": {
-    "APP_ROLE": "admin"
+    "APP_ROLE": "admin",
+    "ADMIN_AUTH_MODE": "basic"
   },
   "compatibility_date": "2026-09-28",
   "d1_databases": [
