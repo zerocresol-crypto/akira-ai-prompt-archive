@@ -6,7 +6,10 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply prompt-archive --local",
-    "db:remote": "wrangler d1 migrations apply prompt-archive --remote"
+    "db:remote": "wrangler d1 migrations apply prompt-archive --remote",
+    "test": "node --test test/*.test.js"
   },
-  "devDependencies": { "wrangler": "^4.0.0" }
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
 }
