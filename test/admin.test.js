@@ -62,6 +62,9 @@ test('admin registration and public draft isolation',async()=>{
     const invalid=await worker.fetch(post(edit,{...form,tags:'invalid tag'},token),env);
     assert.match(await invalid.text(),/タグはカテゴリー/);
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,200);
+    const withoutR2=await (await worker.fetch(get(edit,token),env)).text();
+    assert.doesNotMatch(withoutR2,/type=\"file\"/);
+    assert.match(withoutR2,/画像URL/);
     const objects=new Map();
     env.IMAGES={async put(key,bytes,options){objects.set(key,{bytes,options})},async get(key){const item=objects.get(key);return item?{body:item.bytes,httpEtag:'\"test\"',writeHttpMetadata(headers){headers.set('content-type',item.options.httpMetadata.contentType)}}:null},async delete(key){objects.delete(key)}};
     const uploadForm=new FormData();
