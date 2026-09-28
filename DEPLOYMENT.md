@@ -1,6 +1,6 @@
 # Cloudflare公開手順（初回）
 
-このサイト専用のCloudflare D1とR2を使う。別サイトのDB、バケット、ドメインを流用しない。以下はWindows PowerShellでリポジトリのルートから実行する。Cloudflareの認証情報はGitHubや会話へ貼らない。
+このサイト専用のCloudflare D1を使う。R2はアカウントで有効化された後に追加できる。別サイトのDB、バケット、ドメインを流用しない。以下はWindows PowerShellでリポジトリのルートから実行する。Cloudflareの認証情報はGitHubや会話へ貼らない。
 
 ## 1. 作業環境
 
@@ -15,11 +15,9 @@ npx wrangler whoami
 
 `whoami` のアカウントを確認する。ログイン後、Prompt Archive専用のリソースを作る。
 
-## 2. D1とR2
+## 2. D1
 
-```powershell
-npx wrangler r2 bucket create prompt-archive-images
-```
+R2は現在のアカウントで未有効化（Cloudflareエラー10042）のため、バケット作成を飛ばして進める。
 
 作成済みのD1 IDは `wrangler.jsonc` に反映済み。先に `git pull` で最新版を取得する。D1を重複作成しない。
 
@@ -39,8 +37,12 @@ npm run deploy
 
 表示された `workers.dev` URLで公開画面を確認する。`/admin` はこの時点では403になる設計。管理機能を有効にする前にCloudflare Zero Trustで管理画面用のAccessアプリケーションを作成し、管理するメールアドレスだけを許可する。公開ページをAccessの認証対象に含めない。Accessが発行するJWTのAudience Tag、チームドメイン、管理者メールを確認し、Workerの環境変数 `ACCESS_AUD`、`ACCESS_TEAM_DOMAIN`、`ADMIN_EMAIL` に登録する。これらが揃わない間、Workerは管理操作を拒否する。
 
-画像アップロード、下書き公開、スマートフォン表示、コピー、OGPの確認後に独立したドメインを設定する。aoiro-kirinuki.jp系のサイトとはリンクしない。
+画像URL、下書き公開、スマートフォン表示、コピー、OGPの確認後に独立したドメインを設定する。R2未設定時は画像アップロードフォームを表示せず、各カットにHTTPS画像URLを登録する。aoiro-kirinuki.jp系のサイトとはリンクしない。
 
 ## 現在の状態
 
-D1 `prompt-archive` の作成と実UUIDの設定は完了。R2作成、本番マイグレーション、Access設定、Worker公開はまだ確認できていない。上記のコマンドは準備用であり、この文書を置いただけでは公開されない。
+D1 `prompt-archive` の作成と実UUIDの設定は完了。R2は有効化されておらず、Workerの必須bindingから外した。本番マイグレーション、Access設定、Worker公開はまだ確認できていない。上記のコマンドは準備用であり、この文書を置いただけでは公開されない。
+
+## R2を後から有効化する場合
+
+CloudflareダッシュボードからR2を有効化した後、`npx wrangler r2 bucket create prompt-archive-images` を実行する。`wrangler.jsonc` に `"r2_buckets": [{"binding":"IMAGES","bucket_name":"prompt-archive-images"}]` を追加して再デプロイすると、管理画面の画像アップロードが使用できる。R2の有効化に課金情報の入力が必要な場合は、Cloudflareの条件を確認してから判断する。
