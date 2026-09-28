@@ -1,0 +1,10 @@
+import { readFileSync } from 'node:fs';
+const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+const errors=[];
+if(config.name!=='akira-ai-prompt-archive')errors.push('Worker名が想定と異なります');
+const databases=config.d1_databases||[];
+if(databases.length!==1||databases[0].binding!=='DB'||databases[0].database_name!=='prompt-archive'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(databases[0].database_id||''))errors.push('D1のdatabase_idを実際のUUIDに置き換えてください');
+const buckets=config.r2_buckets||[];
+if(buckets.length!==1||buckets[0].binding!=='IMAGES'||buckets[0].bucket_name!=='prompt-archive-images')errors.push('独立したR2バケットのbindingを確認してください');
+if(!config.main||config.main!=='src/index.js')errors.push('Workerのエントリーポイントを確認してください');
+if(errors.length){for(const error of errors)console.error(`✗ ${error}`);process.exitCode=1}else console.log('Cloudflareの設定値を確認しました。実際のリソースの存在と認証設定は別途確認してください。');
