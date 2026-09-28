@@ -9,7 +9,8 @@
     "db:remote": "wrangler d1 migrations apply DB --remote",
     "test": "node --test test/*.test.js",
     "check:deploy": "node scripts/check-deploy.mjs",
-    "db:verify": "wrangler d1 execute DB --remote --command \"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\""
+    "db:verify": "wrangler d1 execute DB --remote --command \"SELECT name FROM sqlite_master WHERE type='table' ORDER BY name\"",
+    "deploy:admin": "wrangler deploy --config wrangler.admin.jsonc"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
