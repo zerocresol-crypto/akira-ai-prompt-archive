@@ -28,7 +28,7 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 開発
 
-`npm install` → D1を作成して `wrangler.jsonc` のIDを置換 → `npm run db:local` → `npm run dev`。本番へのマイグレーションは `npm run db:remote`、デプロイは `npm run deploy`。登録データがない状態では空状態を表示します。
+`npm install` → D1とR2バケット `prompt-archive-images` を作成して `wrangler.jsonc` のD1 IDを置換 → `npm run db:local` → `npm run dev`。本番へのマイグレーションは `npm run db:remote`、デプロイは `npm run deploy`。登録データがない状態では空状態を表示します。
 
 ## 管理画面の接続
 
@@ -38,7 +38,7 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 - `ACCESS_AUD`：AccessアプリケーションのAudienceタグ
 - `ADMIN_EMAIL`：登録作業を許可するメールアドレス
 
-Accessポリシーで同じ管理者メールのみ許可する。**管理者画面を保護したAccessアプリケーションをWorkersの公開ホスト全体に適用しないこと**。公開画面は誰でも閲覧できる必要があるため、管理用ホスト名を分けて同じWorkerへルーティングするか、`/admin*` のみにポリシーを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像は現段階ではHTTPSの画像URLを入力する（R2への直接アップロードは後続工程）。タグは `season:autumn:秋` のように1行1件で入力する。
+Accessポリシーで同じ管理者メールのみ許可する。**管理者画面を保護したAccessアプリケーションをWorkersの公開ホスト全体に適用しないこと**。公開画面は誰でも閲覧できる必要があるため、管理用ホスト名を分けて同じWorkerへルーティングするか、`/admin*` のみにポリシーを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像はカットの編集画面からR2へアップロードするか、HTTPSの画像URLを入力する。タグは `season:autumn:秋` のように1行1件で入力する。
 
 D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトークンが必要。未接続の環境ではDB IDの置換、remote migration、deployは実行できない。公開前に実データ登録とスマートフォンでの表示確認を行う。
 
@@ -51,3 +51,8 @@ D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトーク
 管理画面でシリーズと日別ページを作り、日別ページの「まとめて取り込む」からJSONを貼り付ける。日曜〜金曜は最大6件、総集編は最大3件。各カットは `slot` (`morning` / `evening`、総集編は `recap`)、`cut_number` (1〜3)、`title`、`positive_prompt` が必須。`negative_prompt`、`description`、`aspect_ratio`、`image_url`、`model_name`、`notes`、`tags` は任意。`tags` は `season:autumn:秋` のような文字列の配列にする。
 
 登録したカットはすべて**下書き**になる。既存の時間帯とCut番号があればバッチ全体を取り消し、既存データを上書きしない。登録後に各カットの画像と説明を確認してから公開状態に切り替える。
+
+
+## 画像の登録
+
+R2バケット `prompt-archive-images` を新規作成して `IMAGES` にバインドする。管理画面のカット編集からJPEG、PNG、WebP（8MB以下）をアップロードすると、ランダムなキーの `/media/art/...` に保存してカットへ紐付ける。画像の形式はファイル名ではなくバイナリ先頭でも確認する。公開画像は同じWorker経由で配信し、OGPでも使う。既存画像の入れ替え時に古い画像を自動削除しないため、将来の保守時に未参照オブジェクトを確認して整理する。
