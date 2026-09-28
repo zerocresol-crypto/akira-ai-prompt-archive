@@ -1,3 +1,4 @@
+import { admin } from './admin.js';
 const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const enc = encodeURIComponent;
 const label = { morning: 'Morning', evening: 'Evening', recap: 'Recap' };
@@ -18,8 +19,8 @@ async function fetchDay(db, seriesId, slug) { return db.prepare('SELECT * FROM d
 export default { async fetch(request, env) {
   try {
     const parts = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
+    if (parts[0] === 'admin') return admin(request,env,parts);
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method Not Allowed', { status: 405 });
-    if (parts[0] === 'admin') return new Response('管理画面は準備中です', { status: 404 });
     if (!parts.length) {
       const [series, recent, tags] = await Promise.all([
         env.DB.prepare("SELECT * FROM series WHERE status='published' ORDER BY start_date DESC,id DESC LIMIT 6").all(),
