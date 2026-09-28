@@ -16,6 +16,20 @@ const validDate = v => !v || /^\d{4}-\d{2}-\d{2}$/.test(v);
 const decoded = v => { try { return JSON.parse(atob(v.replace(/-/g,'+').replace(/_/g,'/'))); } catch { return null; } };
 const tokenBytes = v => Uint8Array.from(atob(v.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 async function authorize(request,env) {
+  if(env.ADMIN_AUTH_MODE==='basic') {
+    if(typeof env.ADMIN_PASSWORD!=='string'||!(/^[0-9a-f]{64}$/i).test(env.ADMIN_PASSWORD))return false;
+    const value=request.headers.get('Authorization')||'';
+    if(!value.startsWith('Basic '))return false;
+    let credentials;try{credentials=atob(value.slice(6))}catch{return false}
+    const separator=credentials.indexOf(':');
+    if(separator<0||credentials.slice(0,separator)!=='admin')return false;
+    const supplied=credentials.slice(separator+1);
+    const expected=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(env.ADMIN_PASSWORD)));
+    const actual=new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(supplied)));
+    let diff=0;for(let i=0;i<expected.length;i++)diff|=expected[i]^actual[i];
+    return diff===0;
+  }
+
   const domain = env.ACCESS_TEAM_DOMAIN, audience = env.ACCESS_AUD, email = env.ADMIN_EMAIL;
   if (!domain || !audience || !email || !/^https:\/\/[a-z0-9.-]+\.cloudflareaccess\.com$/.test(domain)) return false;
   const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
@@ -51,7 +65,8 @@ async function applyTags(db,promptId,parsed) {
   for (const t of parsed) {await db.prepare('INSERT INTO tags(slug,name,category) VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=excluded.name').bind(t.slug,t.name,t.category).run();await db.prepare('INSERT OR IGNORE INTO prompt_tags(prompt_id,tag_id) SELECT ?,id FROM tags WHERE slug=?').bind(promptId,t.slug).run()}
 }
 export async function admin(request,env,parts) {
-  try {if(!await authorize(request,env))return deny('管理者認証が必要です',403)}catch{return deny('管理者認証を確認できませんでした',403)}
+  if(env.ADMIN_AUTH_MODE==='basic' && !(/^[0-9a-f]{64}$/i).test(env.ADMIN_PASSWORD||''))return deny('管理者パスワードが未設定です',503);
+  try {if(!await authorize(request,env))return env.ADMIN_AUTH_MODE==='basic' ? new Response('管理者認証が必要です',{status:401,headers:{'WWW-Authenticate':'Basic realm="Prompt Archive Admin", charset="UTF-8"','cache-control':'no-store','content-type':'text/plain; charset=utf-8'}}) : deny('管理者認証が必要です',403)}catch{return deny('管理者認証を確認できませんでした',403)}
   if(!['GET','POST'].includes(request.method))return deny('Method Not Allowed',405);
   if(request.method==='POST') {
     if(new URL(request.url).origin!==request.headers.get('Origin'))return deny('Origin mismatch',403);
