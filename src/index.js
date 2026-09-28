@@ -20,7 +20,12 @@ async function fetchDay(db, seriesId, slug) { return db.prepare('SELECT * FROM d
 export default { async fetch(request, env) {
   try {
     const parts = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
-    if (parts[0] === 'admin') return admin(request,env,parts);
+    if (env.APP_ROLE === 'admin') {
+      if (parts.length === 0) return Response.redirect(new URL('/admin',request.url),302);
+      if (parts[0] === 'admin') return admin(request,env,parts);
+      return missing(request);
+    }
+    if (parts[0] === 'admin') return env.APP_ROLE === 'public' ? missing(request) : admin(request,env,parts);
     if (parts[0] === 'media') { if (!['GET','HEAD'].includes(request.method)) return new Response('Method Not Allowed',{status:405}); return serveImage(request,env.IMAGES,parts.slice(1).join('/')); }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method Not Allowed', { status: 405 });
     if (!parts.length) {
