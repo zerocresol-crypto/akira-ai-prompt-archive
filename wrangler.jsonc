@@ -1,0 +1,13 @@
+{
+  "name": "akira-ai-prompt-archive",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-28",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prompt-archive",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
