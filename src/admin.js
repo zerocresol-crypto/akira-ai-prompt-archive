@@ -37,11 +37,14 @@ const seriesFields = s => `${input('slug','URL用slug（半角英数字とハイ
 const dayFields = d => `${input('slug','URL用slug',d?.slug,'text',true)}${input('title','日別タイトル',d?.title,'text',true)}${input('date','投稿日',d?.date,'date')}${select('day_order','曜日／区分',[['0','日曜日'],['1','月曜日'],['2','火曜日'],['3','水曜日'],['4','木曜日'],['5','金曜日'],['6','総集編']],String(d?.day_order??0))}${area('description','制作意図',d?.description)}`;
 const promptFields = p => `${select('slot','時間帯',[['morning','朝'],['evening','夜'],['recap','総集編']],p?.slot||'morning')}${select('cut_number','Cut番号',[['1','Cut 1'],['2','Cut 2'],['3','Cut 3']],String(p?.cut_number||1))}${input('title','タイトル',p?.title,'text',true)}${area('description','構図・光・衣装などの制作意図',p?.description)}${area('positive_prompt','Positive Prompt',p?.positive_prompt,true)}${area('negative_prompt','Negative Prompt',p?.negative_prompt)}${select('aspect_ratio','画像比率',[['','未設定'],['16:9','16:9'],['9:16','9:16']],p?.aspect_ratio||'')}${input('image_url','画像URL（https）',p?.image_url)}${input('model_name','使用モデル',p?.model_name||'Anima-Base')}${area('notes','生成上の注意',p?.notes)}${area('tags','タグ（カテゴリー:slug:表示名 を改行区切り）',p?.tags||'')}${status(p?.status||'draft')}`;
 const categories = ['season','outfit','hair','background','time','composition','color','genre','motif'];
-async function applyTags(db,promptId,raw) {
+async function validateTags(db,raw) {
   const lines = raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if (lines.length > 20) throw new Error('タグは20件以内で入力してください');
   const parsed = lines.map(line=>{const [category,slug,...name]=line.split(':');if(!categories.includes(category)||!validSlug(slug)||!name.join(':').trim())throw new Error('タグはカテゴリー:slug:表示名の形式で入力してください');return {category,slug,name:name.join(':').trim()}});
   for(const t of parsed) {const existing=await db.prepare('SELECT category FROM tags WHERE slug=?').bind(t.slug).first();if(existing && existing.category!==t.category)throw new Error('同じslugのタグに異なるカテゴリーは使用できません')}
+  return parsed;
+}
+async function applyTags(db,promptId,parsed) {
   await db.prepare('DELETE FROM prompt_tags WHERE prompt_id=?').bind(promptId).run();
   for (const t of parsed) {await db.prepare('INSERT INTO tags(slug,name,category) VALUES(?,?,?) ON CONFLICT(slug) DO UPDATE SET name=excluded.name').bind(t.slug,t.name,t.category).run();await db.prepare('INSERT OR IGNORE INTO prompt_tags(prompt_id,tag_id) SELECT ?,id FROM tags WHERE slug=?').bind(promptId,t.slug).run()}
 }
@@ -71,10 +74,11 @@ export async function admin(request,env,parts) {
       if(parts[1]==='series' && parts[3]==='days' && parts[5]==='prompts' && ['new','edit'].includes(parts[6]) && parts.length===(parts[6]==='edit'?8:7)) {
         const d=await env.DB.prepare('SELECT d.id,d.day_order,s.slug series_slug FROM days d JOIN series s ON s.id=d.series_id WHERE s.slug=? AND d.slug=?').bind(parts[2],parts[4]).first();if(!d)return deny('Not Found',404);
         if(!['morning','evening','recap'].includes(v('slot'))||!['1','2','3'].includes(v('cut_number'))||(d.day_order!==6 && v('slot')==='recap')||(d.day_order===6 && v('slot')!=='recap')||!v('title')||!v('positive_prompt')||!validUrl(v('image_url'))||!['','16:9','9:16'].includes(v('aspect_ratio'))||!['draft','published'].includes(v('status')))throw Error('プロンプトの入力を確認してください');
+        const parsedTags=await validateTags(env.DB,v('tags'));
         let id;
         const params=[v('slot'),Number(v('cut_number')),v('title'),v('description'),v('positive_prompt'),v('negative_prompt'),v('aspect_ratio')||null,v('image_url')||null,v('model_name')||'Anima-Base',v('notes'),v('status')];
         if(parts[6]==='new'){const result=await env.DB.prepare('INSERT INTO prompts(day_id,slot,cut_number,title,description,positive_prompt,negative_prompt,aspect_ratio,image_url,model_name,notes,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)').bind(d.id,...params).run();id=result.meta.last_row_id}else{const p=await env.DB.prepare('SELECT id FROM prompts WHERE id=? AND day_id=?').bind(parts[7],d.id).first();if(!p)return deny('Not Found',404);id=p.id;await env.DB.prepare('UPDATE prompts SET slot=?,cut_number=?,title=?,description=?,positive_prompt=?,negative_prompt=?,aspect_ratio=?,image_url=?,model_name=?,notes=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...params,id).run()}
-        await applyTags(env.DB,id,v('tags'));
+        await applyTags(env.DB,id,parsedTags);
         return redirect(`/admin/series/${encodeURIComponent(parts[2])}/days/${encodeURIComponent(parts[4])}`);
       }
       return deny('Not Found',404);
