@@ -32,15 +32,9 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 管理画面の接続
 
-管理専用Workerの `/admin` はCloudflare Accessのアプリケーションで保護する。公開Workerの `/admin` は404を返す。さらにWorker内でAccess JWTの署名、issuer、AUD、有効期限、管理者メールを確認する。次の環境変数が揃うまでは403を返す。
+管理専用Worker `akira-ai-prompt-archive-admin` の `/admin` だけでシリーズ、曜日、カット、タグを編集する。公開Workerの `/admin` は404。現在の管理WorkerはHTTP Basic認証を使用し、64文字のランダムな16進パスワードをWorker Secret `ADMIN_PASSWORD` へ登録する。ユーザー名は `admin`。Secretが未設定なら管理画面は503になり、誤った資格情報には401を返す。入力した値とSecretの比較にSHA-256を使い、認証情報はHTTPS上で送信する。全ての変更リクエストは同一Originを要求する。
 
-- `ACCESS_TEAM_DOMAIN`：`https://<team>.cloudflareaccess.com`
-- `ACCESS_AUD`：AccessアプリケーションのAudienceタグ
-- `ADMIN_EMAIL`：登録作業を許可するメールアドレス
-
-Accessポリシーで同じ管理者メールのみ許可する。**公開WorkerにAccessを適用しないこと**。管理専用Worker `akira-ai-prompt-archive-admin` のURL全体にAccessを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像はカットの編集画面からR2へアップロードするか、HTTPSの画像URLを入力する。タグは `season:autumn:秋` のように1行1件で入力する。
-
-D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトークンが必要。未接続の環境ではDB IDの置換、remote migration、deployは実行できない。公開前に実データ登録とスマートフォンでの表示確認を行う。
+セットアップは [DEPLOYMENT.md](DEPLOYMENT.md) を参照。パスワードをソースコードや会話へ載せない。画像はHTTPS画像URLで登録できる。R2有効化後はカット編集画面からの画像アップロードも利用できる。
 
 ## 確認
 
