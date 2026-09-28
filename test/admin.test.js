@@ -62,6 +62,18 @@ test('admin registration and public draft isolation',async()=>{
     const invalid=await worker.fetch(post(edit,{...form,tags:'invalid tag'},token),env);
     assert.match(await invalid.text(),/タグはカテゴリー/);
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,200);
+    const objects=new Map();
+    env.IMAGES={async put(key,bytes,options){objects.set(key,{bytes,options})},async get(key){const item=objects.get(key);return item?{body:item.bytes,httpEtag:'\"test\"',writeHttpMetadata(headers){headers.set('content-type',item.options.httpMetadata.contentType)}}:null},async delete(key){objects.delete(key)}};
+    const uploadForm=new FormData();
+    const pixel=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9f0p8AAAAASUVORK5CYII=','base64');
+    uploadForm.set('image',new File([pixel],'test.png',{type:'image/png'}));
+    const uploadPath='/admin/series/autumn-cafe/days/monday/prompts/edit/1/image';
+    const uploaded=await worker.fetch(new Request(base+uploadPath,{method:'POST',headers:{Origin:base,'Cf-Access-Jwt-Assertion':token},body:uploadForm}),env);
+    assert.equal(uploaded.status,303);
+    const imagePath=DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url;
+    assert.match(imagePath,/^\/media\/art\//);
+    assert.equal((await worker.fetch(get(imagePath),env)).status,200);
+    assert.match(await (await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).text(),/\/media\/art\//);
   } finally {auth.restore()}
 });
 
