@@ -98,3 +98,18 @@ test('six-cut import stays draft and rolls back on duplicate',async()=>{
   assert.equal(DB.prepare('SELECT COUNT(*) count FROM prompts').first().count,6);
   assert.throws(()=>parseImport(JSON.stringify([{...entries[0],slot:'recap'}]),0));
 });
+
+
+test('admin password mode rejects missing and incorrect credentials',async()=>{
+  const DB=database(),secret='a'.repeat(64);
+  const env={DB,APP_ROLE:'admin',ADMIN_AUTH_MODE:'basic',ADMIN_PASSWORD:secret};
+  const addr=base+'/admin';
+  assert.equal((await worker.fetch(new Request(addr),{...env,ADMIN_PASSWORD:undefined})).status,503);
+  const unauthorized=await worker.fetch(new Request(addr),env);
+  assert.equal(unauthorized.status,401);
+  assert.match(unauthorized.headers.get('WWW-Authenticate'),/Basic/);
+  const header=password=>({Authorization:'Basic '+Buffer.from('admin:'+password).toString('base64')});
+  assert.equal((await worker.fetch(new Request(addr,{headers:header('b'.repeat(64))}),env)).status,401);
+  assert.equal((await worker.fetch(new Request(addr,{headers:header(secret)}),env)).status,200);
+  assert.equal((await worker.fetch(new Request(addr,{headers:header(secret)}),{...env,APP_ROLE:'public'})).status,404);
+});
