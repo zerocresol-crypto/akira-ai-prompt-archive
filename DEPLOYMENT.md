@@ -18,11 +18,10 @@ npx wrangler whoami
 ## 2. D1とR2
 
 ```powershell
-npx wrangler d1 create prompt-archive
 npx wrangler r2 bucket create prompt-archive-images
 ```
 
-D1作成時に表示された `database_id`（UUID）を `wrangler.jsonc` の `REPLACE_WITH_D1_DATABASE_ID` と置き換える。GitHubに反映する場合、UUIDは秘密鍵ではないが、他サイトのDB IDを指定しないよう確認する。
+作成済みのD1 IDは `wrangler.jsonc` に反映済み。先に `git pull` で最新版を取得する。D1を重複作成しない。
 
 ```powershell
 npm run check:deploy
@@ -44,4 +43,4 @@ npm run deploy
 
 ## 現在の状態
 
-Cloudflare管理画面への接続がないため、D1/R2作成、実UUIDの設定、本番マイグレーション、Access設定、Worker公開はまだ実施していない。上記のコマンドは準備用であり、この文書を置いただけでは公開されない。
+D1 `prompt-archive` の作成と実UUIDの設定は完了。R2作成、本番マイグレーション、Access設定、Worker公開はまだ確認できていない。上記のコマンドは準備用であり、この文書を置いただけでは公開されない。
