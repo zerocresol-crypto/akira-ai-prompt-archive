@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "prompt-archive",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "be07d0ec-7f32-46e0-bc30-7fa383b2451c",
       "migrations_dir": "migrations"
     }
   ]
