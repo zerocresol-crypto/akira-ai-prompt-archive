@@ -40,6 +40,9 @@ test('admin registration and public draft isolation',async()=>{
     assert.equal((await worker.fetch(get('/admin'),env)).status,403);
     assert.equal((await worker.fetch(get('/admin',await auth.token('stranger@example.com')),env)).status,403);
     assert.equal((await worker.fetch(get('/admin',token),env)).status,200);
+    assert.equal((await worker.fetch(get('/admin',token),{...env,APP_ROLE:'public'})).status,404);
+    assert.equal((await worker.fetch(get('/series'),{...env,APP_ROLE:'admin'})).status,404);
+    assert.equal((await worker.fetch(get('/admin',token),{...env,APP_ROLE:'admin'})).status,200);
     let res=await worker.fetch(post('/admin/series/new',{slug:'autumn-cafe',title:'Autumn Café',concept:'秋の味覚と衣装',status:'published'},token),env);
     assert.equal(res.status,303);
     res=await worker.fetch(post('/admin/series/autumn-cafe/days/new',{slug:'monday',title:'モンブラン',date:'2026-10-05',day_order:'1'},token),env);
