@@ -7,7 +7,8 @@
     "deploy": "wrangler deploy",
     "db:local": "wrangler d1 migrations apply prompt-archive --local",
     "db:remote": "wrangler d1 migrations apply prompt-archive --remote",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "check:deploy": "node scripts/check-deploy.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
