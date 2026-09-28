@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs';
 const config=JSON.parse(readFileSync(new URL('../wrangler.jsonc',import.meta.url),'utf8'));
+const admin=JSON.parse(readFileSync(new URL('../wrangler.admin.jsonc',import.meta.url),'utf8'));
 const errors=[];
+if(admin.name!=='akira-ai-prompt-archive-admin'||admin.vars?.APP_ROLE!=='admin'||config.vars?.APP_ROLE!=='public')errors.push('公開と管理のWorker設定を確認してください');
+if(admin.d1_databases?.[0]?.database_id!==config.d1_databases?.[0]?.database_id)errors.push('公開Workerと管理WorkerでD1が一致しません');
 if(config.name!=='akira-ai-prompt-archive')errors.push('Worker名が想定と異なります');
 const databases=config.d1_databases||[];
 if(databases.length!==1||databases[0].binding!=='DB'||databases[0].database_name!=='prompt-archive'||!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(databases[0].database_id||''))errors.push('D1のdatabase_idを実際のUUIDに置き換えてください');
