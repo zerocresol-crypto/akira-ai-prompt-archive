@@ -11,7 +11,7 @@ Threads [@akira.lether](https://www.threads.com/@akira.lether) のAIイラスト
 | シリーズ詳細 | `/series/:slug` | コンセプト、制作期間、曜日一覧 |
 | 日別 | `/series/:slug/:day` | 朝・夜の各3カット、土曜は総集編 |
 | プロンプト詳細 | `/series/:slug/:day/:slot/:cut` | 画像、制作意図、Positive/Negative、コピー、OGP |
-| 管理画面 | `/admin` | 次工程で実装。認証後にシリーズ・日付・カット・タグを編集 |
+| 管理画面 | 管理専用Workerの `/admin` | Cloudflare Access認証後にシリーズ・日付・カット・タグを編集 |
 
 D1の `series → days → prompts` に `tags` を多対多で結びます。曜日は公開順序 `0=日曜 … 6=総集編`、時間帯は `morning/evening/recap`、カット番号は1〜3。下書きは公開ルートから除外します。画像URLは将来R2へ移せるよう文字列で保持します。画像なしでも公開UIが成立します。
 
@@ -32,13 +32,13 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 管理画面の接続
 
-`/admin` はCloudflare Accessのアプリケーションで保護する。さらにWorker内でAccess JWTの署名、issuer、AUD、有効期限、管理者メールを確認する。次の環境変数が揃うまでは403を返す。
+管理専用Workerの `/admin` はCloudflare Accessのアプリケーションで保護する。公開Workerの `/admin` は404を返す。さらにWorker内でAccess JWTの署名、issuer、AUD、有効期限、管理者メールを確認する。次の環境変数が揃うまでは403を返す。
 
 - `ACCESS_TEAM_DOMAIN`：`https://<team>.cloudflareaccess.com`
 - `ACCESS_AUD`：AccessアプリケーションのAudienceタグ
 - `ADMIN_EMAIL`：登録作業を許可するメールアドレス
 
-Accessポリシーで同じ管理者メールのみ許可する。**管理者画面を保護したAccessアプリケーションをWorkersの公開ホスト全体に適用しないこと**。公開画面は誰でも閲覧できる必要があるため、管理用ホスト名を分けて同じWorkerへルーティングするか、`/admin*` のみにポリシーを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像はカットの編集画面からR2へアップロードするか、HTTPSの画像URLを入力する。タグは `season:autumn:秋` のように1行1件で入力する。
+Accessポリシーで同じ管理者メールのみ許可する。**公開WorkerにAccessを適用しないこと**。管理専用Worker `akira-ai-prompt-archive-admin` のURL全体にAccessを適用する。Workerも上記のJWTを検証し、管理操作を拒否する。管理者画面にはシリーズ、曜日、朝・夜・総集編のカット登録とタグ登録がある。画像はカットの編集画面からR2へアップロードするか、HTTPSの画像URLを入力する。タグは `season:autumn:秋` のように1行1件で入力する。
 
 D1作成にはCloudflareにログイン済みのWranglerか適切なAPIトークンが必要。未接続の環境ではDB IDの置換、remote migration、deployは実行できない。公開前に実データ登録とスマートフォンでの表示確認を行う。
 
