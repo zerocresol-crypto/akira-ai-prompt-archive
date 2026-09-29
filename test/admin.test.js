@@ -99,6 +99,30 @@ test('admin registration and public draft isolation',async()=>{
   } finally {auth.restore()}
 });
 
+test('Threads embed input stores only a validated post URL and renders safely',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sunday','Sunday',0)").run();
+    const path='/admin/series/week/days/sunday/prompts/new';
+    const postUrl='https://www.threads.com/@akira.lether/post/Dd4kbKsiVgx';
+    const embed=`<blockquote class="text-post-media" data-text-post-permalink="${postUrl}"><script>alert(1)</script></blockquote><script src="https://www.threads.com/embed.js"></script>`;
+    const form={slot:'morning',cut_number:'1',title:'Threadsの作品',positive_prompt:'light',image_url:embed,status:'published'};
+    assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
+    assert.equal(DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url,postUrl);
+    const detail=await (await worker.fetch(get('/series/week/sunday/morning/1'),env)).text();
+    assert.match(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/\@akira\.lether\/post\/Dd4kbKsiVgx"/);
+    assert.match(detail,/www\.threads\.com\/embed\.js/);
+    assert.doesNotMatch(detail,/alert\(1\)|property="og:image"/);
+    const list=await (await worker.fetch(get('/series/week/sunday'),env)).text();
+    assert.match(list,/Threads<br>投稿を見る/);
+    assert.doesNotMatch(list,/<img[^>]+threads\.com/);
+    const invalid=await worker.fetch(post(path,{...form,cut_number:'2',image_url:'<blockquote data-text-post-permalink="https://evil.example/post/1"></blockquote>'},token),env);
+    assert.match(await invalid.text(),/Threads埋め込みタグの投稿URL/);
+  } finally {auth.restore()}
+});
+
 
 test('six-cut import stays draft and rolls back on duplicate',async()=>{
   const DB=database();
