@@ -3,6 +3,7 @@ import { admin } from './admin.js';
 const escapeHtml = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const enc = encodeURIComponent;
 const label = { morning: 'Morning', evening: 'Evening', recap: 'Recap' };
+const visible = (alias='') => `${alias ? alias+'.' : ''}status='published' AND (${alias ? alias+'.' : ''}publish_at IS NULL OR ${alias ? alias+'.' : ''}publish_at <= ?)`;
 const weekdays = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '総集編'];
 const url = (s, d, p) => `/series/${enc(s.slug)}/${enc(d.slug)}${p ? `/${p.slot}/${p.cut_number}` : ''}`;
 const img = (src, alt, cls = '') => src ? `<img class="${cls}" src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy">` : `<div class="placeholder ${cls}" aria-label="画像準備中">ARTWORK<br>COMING SOON</div>`;
@@ -11,14 +12,15 @@ const css = `:root{color-scheme:dark;font-family:Inter,'Noto Sans JP',system-ui,
 function page(title, content, request, description = 'AIイラストの制作意図と完全版プロンプトを読むアーカイブ。', imageUrl) {
   const canonical = request.url;
   const meta = `<meta name="description" content="${escapeHtml(description)}"><meta property="og:type" content="article"><meta property="og:title" content="${escapeHtml(title)} | AIイラスト Prompt Archive"><meta property="og:description" content="${escapeHtml(description)}"><meta property="og:url" content="${escapeHtml(canonical)}">${imageUrl ? `<meta property="og:image" content="${escapeHtml(new URL(imageUrl,canonical).href)}">` : ''}<meta name="twitter:card" content="${imageUrl ? 'summary_large_image' : 'summary'}"><link rel="canonical" href="${escapeHtml(canonical)}">`;
-  return new Response(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} | AIイラスト Prompt Archive</title>${meta}<style>${css}</style></head><body><header><nav class="shell"><a href="/"><strong>✦ AIイラスト Prompt Archive</strong></a><div><a href="/series">シリーズ一覧</a><a href="/about">このサイトについて</a></div></nav></header><main class="shell">${content}</main><footer><div class="shell">AIイラスト Prompt Archive · <a href="https://www.threads.com/@akira.lether" rel="me noopener">Threads @akira.lether ↗</a></div></footer><script>document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const value=document.getElementById(button.dataset.copy)?.textContent||'';try{await navigator.clipboard.writeText(value);button.textContent='コピーしました';setTimeout(()=>button.textContent='コピー',1800)}catch{button.textContent='選択してコピー';document.getElementById(button.dataset.copy)?.focus()}}))</script></body></html>`, { headers: { 'content-type': 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin' } });
+  return new Response(`<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} | AIイラスト Prompt Archive</title>${meta}<style>${css}</style></head><body><header><nav class="shell"><a href="/"><strong>✦ AIイラスト Prompt Archive</strong></a><div><a href="/series">シリーズ一覧</a><a href="/about">このサイトについて</a></div></nav></header><main class="shell">${content}</main><footer><div class="shell">AIイラスト Prompt Archive · <a href="https://www.threads.com/@akira.lether" rel="me noopener">Threads @akira.lether ↗</a></div></footer><script>document.querySelectorAll('[data-copy]').forEach(button=>button.addEventListener('click',async()=>{const value=document.getElementById(button.dataset.copy)?.textContent||'';try{await navigator.clipboard.writeText(value);button.textContent='コピーしました';setTimeout(()=>button.textContent='コピー',1800)}catch{button.textContent='選択してコピー';document.getElementById(button.dataset.copy)?.focus()}}))</script></body></html>`, { headers: { 'cache-control': 'no-store', 'content-type': 'text/html; charset=utf-8', 'x-content-type-options': 'nosniff', 'referrer-policy': 'strict-origin-when-cross-origin' } });
 }
 const missing = request => new Response('ページが見つかりません', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
 const empty = text => `<div class="empty">${text}</div>`;
-async function fetchSeries(db, slug) { return db.prepare("SELECT * FROM series WHERE slug = ? AND status = 'published'").bind(slug).first(); }
+async function fetchSeries(db, slug, now) { return db.prepare(`SELECT * FROM series WHERE slug = ? AND ${visible()}`).bind(slug,now).first(); }
 async function fetchDay(db, seriesId, slug) { return db.prepare('SELECT * FROM days WHERE series_id = ? AND slug = ?').bind(seriesId,slug).first(); }
 export default { async fetch(request, env) {
   try {
+    const now = new Date().toISOString();
     const parts = new URL(request.url).pathname.split('/').filter(Boolean).map(decodeURIComponent);
     if (env.APP_ROLE === 'admin') {
       if (parts.length === 0) return Response.redirect(new URL('/admin',request.url),302);
@@ -30,37 +32,37 @@ export default { async fetch(request, env) {
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method Not Allowed', { status: 405 });
     if (!parts.length) {
       const [series, recent, tags] = await Promise.all([
-        env.DB.prepare("SELECT * FROM series WHERE status='published' ORDER BY start_date DESC,id DESC LIMIT 6").all(),
-        env.DB.prepare("SELECT p.*,d.slug day_slug,s.slug series_slug,s.title series_title FROM prompts p JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE p.status='published' AND s.status='published' ORDER BY p.created_at DESC,p.id DESC LIMIT 6").all(),
-        env.DB.prepare("SELECT t.name,t.slug FROM tags t JOIN prompt_tags pt ON pt.tag_id=t.id JOIN prompts p ON p.id=pt.prompt_id JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE p.status='published' AND s.status='published' GROUP BY t.id ORDER BY COUNT(*) DESC LIMIT 12").all()
+        env.DB.prepare(`SELECT * FROM series WHERE ${visible()} ORDER BY start_date DESC,id DESC LIMIT 6`).bind(now).all(),
+        env.DB.prepare(`SELECT p.*,d.slug day_slug,s.slug series_slug,s.title series_title FROM prompts p JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE ${visible('p')} AND ${visible('s')} ORDER BY p.created_at DESC,p.id DESC LIMIT 6`).bind(now,now).all(),
+        env.DB.prepare(`SELECT t.name,t.slug FROM tags t JOIN prompt_tags pt ON pt.tag_id=t.id JOIN prompts p ON p.id=pt.prompt_id JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE ${visible('p')} AND ${visible('s')} GROUP BY t.id ORDER BY COUNT(*) DESC LIMIT 12`).bind(now,now).all()
       ]);
       const body = `<div class="eyebrow">ARTWORK × PROMPT × PROCESS</div><h1>一枚の絵、その設計まで。</h1><p class="intro">Threadsで公開しているAIイラストの完全版プロンプトと、構図・衣装・背景・光の考え方をまとめたアーカイブです。</p><h2>最新シリーズ</h2><div class="grid">${series.results.map(s=>`<a class="card" href="/series/${enc(s.slug)}">${img(s.cover_url,s.title)}<div class="card-body"><small>${escapeHtml(s.start_date||'SERIES')}</small><h3>${escapeHtml(s.title)}</h3><span class="link">シリーズを見る ↗</span></div></a>`).join('')}</div>${series.results.length?'':empty('シリーズを準備中です。公開後、ここに表示されます。')}<h2>最近追加されたプロンプト</h2><div class="grid">${recent.results.map(p=>card({slug:p.series_slug,title:p.series_title},{slug:p.day_slug},p)).join('')}</div>${recent.results.length?'':empty('プロンプトを準備中です。')}<h2>タグから探す</h2>${tags.results.map(t=>`<a class="pill" href="/tags/${enc(t.slug)}">#${escapeHtml(t.name)}</a>`).join('')||empty('タグは準備中です。')}`;
       return page('トップ',body,request);
     }
     if (parts[0] === 'about' && parts.length === 1) return page('このサイトについて',`<div class="eyebrow">ABOUT THE ARCHIVE</div><h1>作品とプロンプトの間にあるもの。</h1><div class="panel"><p>このサイトでは、Threads <a class="link" href="https://www.threads.com/@akira.lether">@akira.lether</a> で投稿しているAIイラストの制作意図と、各カット専用のプロンプトを紹介します。</p><p>主な生成環境はComfyUI、Anima / Anima-Baseです。プロンプトは参考例として掲載しています。生成結果は設定や環境によって変わります。</p></div>`,request);
     if (parts[0] === 'series' && parts.length === 1) {
-      const items = await env.DB.prepare("SELECT * FROM series WHERE status='published' ORDER BY start_date DESC,id DESC").all();
+      const items = await env.DB.prepare(`SELECT * FROM series WHERE ${visible()} ORDER BY start_date DESC,id DESC`).bind(now).all();
       return page('シリーズ一覧',`<div class="eyebrow">COLLECTIONS</div><h1>シリーズ一覧</h1><div class="grid">${items.results.map(s=>`<a class="card" href="/series/${enc(s.slug)}">${img(s.cover_url,s.title)}<div class="card-body"><h3>${escapeHtml(s.title)}</h3><small>${escapeHtml(s.start_date||'')} ${s.end_date?'— '+escapeHtml(s.end_date):''}</small><p>${escapeHtml(s.concept)}</p></div></a>`).join('')}</div>${items.results.length?'':empty('公開シリーズはまだありません。')}`,request);
     }
     if (parts[0] === 'tags' && parts.length === 2) {
       const tag = await env.DB.prepare('SELECT * FROM tags WHERE slug=?').bind(parts[1]).first(); if (!tag) return missing(request);
-      const found = await env.DB.prepare("SELECT p.*,d.slug day_slug,s.slug series_slug,s.title series_title FROM prompts p JOIN prompt_tags pt ON pt.prompt_id=p.id JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE pt.tag_id=? AND p.status='published' AND s.status='published' ORDER BY p.created_at DESC").bind(tag.id).all();
+      const found = await env.DB.prepare(`SELECT p.*,d.slug day_slug,s.slug series_slug,s.title series_title FROM prompts p JOIN prompt_tags pt ON pt.prompt_id=p.id JOIN days d ON d.id=p.day_id JOIN series s ON s.id=d.series_id WHERE pt.tag_id=? AND ${visible('p')} AND ${visible('s')} ORDER BY p.created_at DESC`).bind(tag.id,now,now).all();
       return page(`#${tag.name}`,`<h1>#${escapeHtml(tag.name)}</h1><div class="grid">${found.results.map(p=>card({slug:p.series_slug,title:p.series_title},{slug:p.day_slug},p)).join('')}</div>${found.results.length?'':empty('該当する公開プロンプトはありません。')}`,request);
     }
     if (parts[0] !== 'series' || parts.length < 2 || parts.length > 5) return missing(request);
-    const s = await fetchSeries(env.DB,parts[1]); if (!s) return missing(request);
+    const s = await fetchSeries(env.DB,parts[1],now); if (!s) return missing(request);
     if (parts.length === 2) {
-      const days = await env.DB.prepare("SELECT d.*,COUNT(p.id) count FROM days d LEFT JOIN prompts p ON p.day_id=d.id AND p.status='published' WHERE d.series_id=? GROUP BY d.id ORDER BY d.day_order").bind(s.id).all();
+      const days = await env.DB.prepare(`SELECT d.*,COUNT(p.id) count FROM days d LEFT JOIN prompts p ON p.day_id=d.id AND ${visible('p')} WHERE d.series_id=? GROUP BY d.id ORDER BY d.day_order`).bind(now,s.id).all();
       return page(s.title,`<div class="breadcrumbs"><a href="/series">シリーズ一覧</a> / ${escapeHtml(s.title)}</div><div class="eyebrow">SERIES / ${escapeHtml(s.start_date||'')}</div><h1>${escapeHtml(s.title)}</h1><p class="intro">${escapeHtml(s.concept)}</p>${s.cover_url?img(s.cover_url,s.title,'hero-image'):''}<h2>日別プロンプト</h2><div class="day-list">${days.results.filter(d=>d.count).map(d=>`<a href="${url(s,d)}"><small>${weekdays[d.day_order]}</small><h3>${escapeHtml(d.title)}</h3><small>${d.count} CUTS →</small></a>`).join('')}</div>${days.results.some(d=>d.count)?'':empty('プロンプトを準備中です。')}`,request,s.concept,s.cover_url);
     }
     const d = await fetchDay(env.DB,s.id,parts[2]); if (!d) return missing(request);
     const crumbs = `<div class="breadcrumbs"><a href="/series">シリーズ一覧</a> / <a href="/series/${enc(s.slug)}">${escapeHtml(s.title)}</a> / ${escapeHtml(d.title)}</div>`;
     if (parts.length === 3) {
-      const prompts = await env.DB.prepare("SELECT * FROM prompts WHERE day_id=? AND status='published' ORDER BY CASE slot WHEN 'morning' THEN 0 WHEN 'evening' THEN 1 ELSE 2 END,cut_number").bind(d.id).all();
+      const prompts = await env.DB.prepare(`SELECT * FROM prompts WHERE day_id=? AND ${visible()} ORDER BY CASE slot WHEN 'morning' THEN 0 WHEN 'evening' THEN 1 ELSE 2 END,cut_number`).bind(d.id,now).all();
       return page(`${d.title} | ${s.title}`,`${crumbs}<div class="eyebrow">${weekdays[d.day_order]} · ${escapeHtml(d.date||'')}</div><h1>${escapeHtml(d.title)}</h1><p class="intro">${escapeHtml(d.description)}</p>${['morning','evening','recap'].filter(slot=>prompts.results.some(p=>p.slot===slot)).map(slot=>`<h2>${label[slot]}</h2><div class="grid">${prompts.results.filter(p=>p.slot===slot).map(p=>card(s,d,p)).join('')}</div>`).join('')}${prompts.results.length?'':empty('公開プロンプトは準備中です。')}`,request,d.description);
     }
     if (parts.length !== 5 || !label[parts[3]] || !/^[1-3]$/.test(parts[4])) return missing(request);
-    const p = await env.DB.prepare("SELECT * FROM prompts WHERE day_id=? AND slot=? AND cut_number=? AND status='published'").bind(d.id,parts[3],Number(parts[4])).first(); if (!p) return missing(request);
+    const p = await env.DB.prepare(`SELECT * FROM prompts WHERE day_id=? AND slot=? AND cut_number=? AND ${visible()}`).bind(d.id,parts[3],Number(parts[4]),now).first(); if (!p) return missing(request);
     const tags = await env.DB.prepare('SELECT t.* FROM tags t JOIN prompt_tags pt ON pt.tag_id=t.id WHERE pt.prompt_id=? ORDER BY t.category,t.name').bind(p.id).all();
     const block = (name,value,id) => `<div class="prompt-box"><div class="prompt-head"><strong>${name}</strong><button type="button" data-copy="${id}" aria-label="${name}をコピー">コピー</button></div><pre id="${id}" tabindex="0">${escapeHtml(value)}</pre></div>`;
     const body = `${crumbs}<div class="eyebrow">${escapeHtml(label[p.slot])} / CUT ${String(p.cut_number).padStart(2,'0')} · ${escapeHtml(p.model_name)}</div><h1>${escapeHtml(p.title)}</h1><div class="detail-layout"><div>${img(p.image_url,p.title,'hero-image')}<div class="panel"><h3>このカットの設計</h3><p>${escapeHtml(p.description||'制作メモを準備中です。')}</p>${p.aspect_ratio?`<span class="pill">${escapeHtml(p.aspect_ratio)}</span>`:''}${tags.results.map(t=>`<a class="pill" href="/tags/${enc(t.slug)}">#${escapeHtml(t.name)}</a>`).join('')}${p.notes?`<p>${escapeHtml(p.notes)}</p>`:''}</div></div><div><h2>Complete Prompt</h2><p class="intro">ボタンから各プロンプトをコピーできます。</p>${block('Positive Prompt',p.positive_prompt,'positive')}${block('Negative Prompt',p.negative_prompt,'negative')}<a class="link" href="${url(s,d)}">← ${escapeHtml(d.title)}のカット一覧</a></div></div>`;
