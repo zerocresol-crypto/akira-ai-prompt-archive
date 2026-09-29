@@ -139,6 +139,30 @@ test('model migration updates previously saved cuts',()=>{
   assert.equal(db.prepare('SELECT model_name FROM prompts WHERE id=1').get().model_name,'Q-ANIMA v1.0');
 });
 
+test('copy form carries shared fields to another day and starts as a draft',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sun','Sunday',0)").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'mon','Monday',1)").run();
+    DB.prepare("INSERT INTO prompts(day_id,slot,cut_number,title,positive_prompt,negative_prompt,image_url,status,publish_at) VALUES(1,'morning',1,'Original','warm light','bad hands','https://example.com/one.jpg','published','2026-10-01T00:00:00.000Z')").run();
+    DB.prepare("INSERT INTO tags(slug,name,category) VALUES('autumn','秋','season')").run();
+    DB.prepare('INSERT INTO prompt_tags(prompt_id,tag_id) VALUES(1,1)').run();
+    const copy='/admin/series/week/days/sun/prompts/copy/1';
+    const page=await (await worker.fetch(get(copy+'?target=mon',token),env)).text();
+    assert.match(page,/action="\/admin\/series\/week\/days\/mon\/prompts\/new"/);
+    assert.match(page,/warm light/);assert.match(page,/bad hands/);assert.match(page,/season:autumn:秋/);
+    assert.doesNotMatch(page,/one\.jpg|2026-10-01T00:00/);
+    assert.match(page,/name="status"[^>]*>[\s\S]*?<option value="draft" selected/);
+    assert.match(page,/name="image_url"[^>]*>\s*<\/textarea>/);
+    const sameDay=await (await worker.fetch(get(copy,token),env)).text();
+    assert.match(sameDay,/<option value="2" selected>Cut 2<\/option>/);
+    assert.equal((await worker.fetch(get(copy+'?target=unknown',token),env)).status,404);
+    assert.equal((await worker.fetch(get(copy),env)).status,403);
+  } finally {auth.restore()}
+});
+
 
 test('six-cut import stays draft and rolls back on duplicate',async()=>{
   const DB=database();
