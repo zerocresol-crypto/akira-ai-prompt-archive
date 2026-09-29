@@ -1,5 +1,13 @@
 # Cloudflare公開手順（初回）
 
+## スマートフォンからの更新
+
+プロンプト・画像URL・タグの登録は管理Workerの `/admin` から行う。D1へ直接保存されるので、GitHub更新やWorkerデプロイは不要。
+
+コードの更新は `.github/workflows/deploy.yml` で自動デプロイできる。最初にGitHubリポジトリの Settings → Secrets and variables → Actions へ、Repository secrets として `CLOUDFLARE_API_TOKEN` と `CLOUDFLARE_ACCOUNT_ID` を登録する。Cloudflareの Account API tokens で、対象アカウントだけに限定した「Edit Cloudflare Workers」トークンを作る。トークンをコード・会話・スクリーンショットへ貼らない。`ADMIN_PASSWORD` は引き続き管理WorkerのSecretに置き、GitHubへ移さない。
+
+設定後は `main` のコード更新でテストが実行され、公開Worker→管理Workerの順にデプロイされる。スマホからはGitHubの Actions → Deploy Prompt Archive → Run workflow で手動再実行も可能。結果はActions画面で確認する。初回設定前のWorkflowは認証情報不足で失敗するが、現在稼働中のWorkerは変わらない。D1マイグレーションは自動実行しない。新しいマイグレーションが必要なリリースでは先に `npm run db:remote` を実行する。
+
 このサイト専用のCloudflare D1を使う。R2はアカウントで有効化された後に追加できる。別サイトのDB、バケット、ドメインを流用しない。以下はWindows PowerShellでリポジトリのルートから実行する。Cloudflareの認証情報はGitHubや会話へ貼らない。
 
 ## 1. 作業環境
