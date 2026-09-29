@@ -51,6 +51,10 @@ test('admin registration and public draft isolation',async()=>{
     const form={slot:'morning',cut_number:'1',title:'窓辺のモンブラン',positive_prompt:'soft light',negative_prompt:'blurry',tags:'season:autumn:秋\ngenre:cafe:カフェ',status:'draft'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,404);
+    const dayHtml=await (await worker.fetch(get('/admin/series/autumn-cafe/days/monday',token),env)).text();
+    assert.match(dayHtml,/登録済み 1 \/ 最大 6 カット/);
+    assert.match(dayHtml,/画像未登録 1 件 · 制作意図未登録 1 件 · タグ未登録 0 件/);
+    assert.match(dayHtml,/未登録: 画像・制作意図/);
     const preview='/admin/series/autumn-cafe/days/monday/prompts/preview/1';
     assert.equal((await worker.fetch(get(preview),env)).status,403);
     assert.equal((await worker.fetch(get(preview,token),{...env,APP_ROLE:'public'})).status,404);
