@@ -1,5 +1,5 @@
 {
-  "name": "akira-ai-prompt-archive",
+  "name": "prompt-archive",
   "main": "src/index.js",
   "vars": { "APP_ROLE": "public" },
   "compatibility_date": "2026-09-28",
