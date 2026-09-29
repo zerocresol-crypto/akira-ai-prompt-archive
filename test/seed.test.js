@@ -6,7 +6,7 @@ import worker from '../src/index.js';
 
 test('Autumn Café skeleton is correctly dated and remains private',async()=>{
   const db=new DatabaseSync(':memory:');
-  for(const name of ['0001_init.sql','0002_seed_autumn_cafe.sql'])db.exec(readFileSync(new URL(`../migrations/${name}`,import.meta.url),'utf8'));
+  for(const name of ['0001_init.sql','0002_seed_autumn_cafe.sql','0003_schedule.sql'])db.exec(readFileSync(new URL(`../migrations/${name}`,import.meta.url),'utf8'));
   const days=db.prepare('SELECT day_order,date,title FROM days ORDER BY day_order').all();
   assert.deepEqual(days.map(d=>d.date),['2026-10-04','2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-10']);
   assert.equal(days.length,7);
