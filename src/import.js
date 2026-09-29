@@ -17,7 +17,7 @@ export function parseImport(raw,dayOrder) {
     if(!text(row.title,200)||!row.title.trim()||!text(row.positive_prompt)||!row.positive_prompt.trim()||!text(row.negative_prompt??'')||!text(row.description??'',2000)||!text(row.notes??'',2000)||!text(row.model_name??'',200)||!['','16:9','9:16'].includes(row.aspect_ratio??'')||!text(row.image_url??'',2048)||row.image_url&&(!row.image_url.startsWith('https://')||!URL.canParse(row.image_url)))throw Error('タイトル、プロンプト、画像URLを確認してください');
     const tags=row.tags??[];if(!Array.isArray(tags)||tags.length>20)throw Error('タグは配列で20件以内にしてください');
     const parsed=tags.map(value=>{if(typeof value!=='string')throw Error('タグの形式を確認してください');const [category,tagSlug,...name]=value.split(':');if(!categories.has(category)||!slug(tagSlug)||!name.join(':').trim()||name.join(':').length>100)throw Error('タグはカテゴリー:slug:表示名の形式にしてください');return {category,slug:tagSlug,name:name.join(':').trim()}});
-    out.push({slot:row.slot,cut_number:row.cut_number,title:row.title.trim(),description:row.description??'',positive_prompt:row.positive_prompt,negative_prompt:row.negative_prompt??'',aspect_ratio:row.aspect_ratio||null,image_url:row.image_url||null,model_name:row.model_name||'Anima-Base',notes:row.notes??'',tags:parsed});
+    out.push({slot:row.slot,cut_number:row.cut_number,title:row.title.trim(),description:row.description??'',positive_prompt:row.positive_prompt,negative_prompt:row.negative_prompt??'',aspect_ratio:row.aspect_ratio||null,image_url:row.image_url||null,model_name:'Q-ANIMA v1.0',notes:row.notes??'',tags:parsed});
   }
   return out;
 }
