@@ -51,6 +51,17 @@ test('admin registration and public draft isolation',async()=>{
     const form={slot:'morning',cut_number:'1',title:'窓辺のモンブラン',positive_prompt:'soft light',negative_prompt:'blurry',tags:'season:autumn:秋\ngenre:cafe:カフェ',status:'draft'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,404);
+    const preview='/admin/series/autumn-cafe/days/monday/prompts/preview/1';
+    assert.equal((await worker.fetch(get(preview),env)).status,403);
+    assert.equal((await worker.fetch(get(preview,token),{...env,APP_ROLE:'public'})).status,404);
+    const draftPreview=await worker.fetch(get(preview,token),env);
+    assert.equal(draftPreview.status,200);
+    assert.equal(draftPreview.headers.get('cache-control'),'no-store');
+    const previewHtml=await draftPreview.text();
+    assert.match(previewHtml,/下書きプレビュー/);
+    assert.match(previewHtml,/soft light/);
+    assert.match(previewHtml,/カフェ/);
+    assert.match(previewHtml,/data-copy="positive"/);
     const edit='/admin/series/autumn-cafe/days/monday/prompts/edit/1';
     assert.equal((await worker.fetch(post(edit,{...form,status:'published'},token),env)).status,303);
     const detail=await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env);
