@@ -32,7 +32,7 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 管理画面の接続
 
-管理専用Worker `akira-ai-prompt-archive-admin` の `/admin` だけでシリーズ、曜日、カット、タグを編集する。公開Workerの `/admin` は404。現在の管理WorkerはHTTP Basic認証を使用し、64文字のランダムな16進パスワードをWorker Secret `ADMIN_PASSWORD` へ登録する。ユーザー名は `admin`。Secretが未設定なら管理画面は503になり、誤った資格情報には401を返す。入力した値とSecretの比較にSHA-256を使い、認証情報はHTTPS上で送信する。全ての変更リクエストは同一Originを要求する。
+管理専用Worker `prompt-archive-admin` の `/admin` だけでシリーズ、曜日、カット、タグを編集する。公開Workerの `/admin` は404。現在の管理WorkerはHTTP Basic認証を使用し、64文字のランダムな16進パスワードをWorker Secret `ADMIN_PASSWORD` へ登録する。ユーザー名は `admin`。Secretが未設定なら管理画面は503になり、誤った資格情報には401を返す。入力した値とSecretの比較にSHA-256を使い、認証情報はHTTPS上で送信する。全ての変更リクエストは同一Originを要求する。
 
 セットアップは [DEPLOYMENT.md](DEPLOYMENT.md) を参照。パスワードをソースコードや会話へ載せない。画像はHTTPS画像URLで登録できる。R2有効化後はカット編集画面からの画像アップロードも利用できる。
 

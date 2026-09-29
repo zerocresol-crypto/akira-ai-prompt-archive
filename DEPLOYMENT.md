@@ -1,5 +1,19 @@
 # Cloudflare公開手順（初回）
 
+## URLを匿名の名前に切り替える（準備中）
+
+目標URLは公開 `https://prompt-archive.atelier-notes.workers.dev/`、管理 `https://prompt-archive-admin.atelier-notes.workers.dev/admin`。Cloudflareの `atelier-notes` が利用可能な場合に限る。空き状況を確認するまではアカウントのサブドメインを変更しない。
+
+Cloudflareの Workers & Pages に表示されるWorker一覧と、各Workerのカスタムドメインの有無を確認する。アカウント共通の `workers.dev` サブドメイン変更は他のWorkerのURLにも影響する。既存URLの利用先（リンク、監視、ブックマーク）を記録する。変更前にD1のバックアップを確認する。
+
+1. Cloudflare Workers & Pages の「Your subdomain」→「Change」で `atelier-notes` の空きを確認し、他のWorkerへの影響を確認してから変更する。この時点では旧Worker名が付いたURLで既存サイトが稼働する。
+2. このブランチを `main` に反映するとGitHub Actionsが新しい公開・管理Workerを作成する。両方とも既存のD1 `prompt-archive` を参照する。旧Workerは残す。新しい管理Workerには `ADMIN_PASSWORD` Secretがないため、設定するまで管理画面は503になる。
+3. パスワード管理ツールに保存済みの既存パスワードを、PCで `npx wrangler secret put ADMIN_PASSWORD --config wrangler.admin.jsonc` に入力して新管理Workerへ登録する。新しいパスワードに変える場合は64文字のランダムな値を生成して保存する。SecretをGitHubや会話へ載せない。
+4. 新URLで公開トップ（200）、下書きシリーズ（404）、公開側の `/admin`（404）、管理側の未認証 `/admin`（401）、正しいパスワードでの日別編集・保存を確認する。公開ページの画像URL・OGP・共有リンクも確認する。
+5. 新URLを利用するリンク・監視・ブックマークを更新する。旧Workerの停止は新URLと管理編集の確認後に行う。旧Workerを削除する前にSecretやD1設定を確認し、D1本体は削除しない。
+
+`workers.dev` のアカウントサブドメイン変更は旧WorkerのURLにも同時に反映されるため、旧サブドメインURLを恒久的な転送先として扱わない。
+
 ## スマートフォンからの更新
 
 プロンプト・画像URL・タグの登録は管理Workerの `/admin` から行う。D1へ直接保存されるので、GitHub更新やWorkerデプロイは不要。
@@ -73,6 +87,6 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 npx wrangler secret put ADMIN_PASSWORD --config wrangler.admin.jsonc
 ```
 
-2行目の対話入力欄に、生成した64文字を貼り付ける。Worker Secretは公開リポジトリや設定ファイルへ書かない。設定後、`https://akira-ai-prompt-archive-admin.zero-cresol.workers.dev/admin` を開く。ブラウザーの認証ダイアログに**ユーザー名 `admin`** と保存したパスワードを入力する。一般公開サイト `https://akira-ai-prompt-archive.zero-cresol.workers.dev/` はログイン不要のまま開く。
+2行目の対話入力欄に、生成した64文字を貼り付ける。Worker Secretは公開リポジトリや設定ファイルへ書かない。設定後、`https://prompt-archive-admin.atelier-notes.workers.dev/admin` を開く。ブラウザーの認証ダイアログに**ユーザー名 `admin`** と保存したパスワードを入力する。一般公開サイト `https://prompt-archive.atelier-notes.workers.dev/` はログイン不要のまま開く。
 
 パスワードを紛失した場合は新たに生成して `ADMIN_PASSWORD` Secretを上書きする。以前のパスワードは使えなくなる。Zero Trustを後から導入する場合も管理Workerのみを保護し、公開Workerに設定しない。

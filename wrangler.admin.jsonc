@@ -1,5 +1,5 @@
 {
-  "name": "akira-ai-prompt-archive-admin",
+  "name": "prompt-archive-admin",
   "main": "src/index.js",
   "vars": {
     "APP_ROLE": "admin",
