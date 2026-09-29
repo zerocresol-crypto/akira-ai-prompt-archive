@@ -8,6 +8,7 @@ import { importDrafts, parseImport } from '../src/import.js';
 function database() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_schedule.sql',import.meta.url),'utf8'));
   return { batch(statements){db.exec('BEGIN');try{const out=statements.map(st=>st.run());db.exec('COMMIT');return out}catch(error){db.exec('ROLLBACK');throw error}}, prepare(sql) {
     const statement=db.prepare(sql);
     return {bind(...args){this.args=args;return this}, first(){return statement.get(...(this.args||[]))||null}, all(){return {results:statement.all(...(this.args||[]))}}, run(){const result=statement.run(...(this.args||[]));return {meta:{last_row_id:Number(result.lastInsertRowid)}}}};
@@ -127,4 +128,31 @@ test('admin password mode rejects missing and incorrect credentials',async()=>{
   assert.equal((await worker.fetch(new Request(addr,{headers:header('b'.repeat(64))}),env)).status,401);
   assert.equal((await worker.fetch(new Request(addr,{headers:header(secret)}),env)).status,200);
   assert.equal((await worker.fetch(new Request(addr,{headers:header(secret)}),{...env,APP_ROLE:'public'})).status,404);
+});
+
+
+test('scheduled series and cuts stay hidden until their JST publication time',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token(),future='2099-10-04T05:00',past='2020-10-04T05:00';
+    const series='/admin/series/new';
+    assert.equal((await worker.fetch(post(series,{slug:'scheduled',title:'予約シリーズ',status:'published',publish_at:future},token),env)).status,303);
+    assert.equal((await worker.fetch(get('/series/scheduled'),env)).status,404);
+    assert.doesNotMatch(await (await worker.fetch(get('/series'),env)).text(),/予約シリーズ/);
+    assert.equal((await worker.fetch(post('/admin/series/edit/1',{slug:'scheduled',title:'予約シリーズ',status:'published',publish_at:past},token),env)).status,303);
+    assert.equal((await worker.fetch(get('/series/scheduled'),env)).status,200);
+    assert.equal((await worker.fetch(post('/admin/series/scheduled/days/new',{slug:'sunday',title:'日曜',date:'2099-10-04',day_order:'0'},token),env)).status,303);
+    const form={slot:'morning',cut_number:'1',title:'予約Cut',positive_prompt:'secret before release',status:'published',publish_at:future,tags:'season:autumn:秋'};
+    const create='/admin/series/scheduled/days/sunday/prompts/new';
+    assert.equal((await worker.fetch(post(create,form,token),env)).status,303);
+    const detail='/series/scheduled/sunday/morning/1';
+    assert.equal((await worker.fetch(get(detail),env)).status,404);
+    assert.doesNotMatch(await (await worker.fetch(get('/'),env)).text(),/予約Cut/);
+    assert.doesNotMatch(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
+    assert.doesNotMatch(await (await worker.fetch(get('/series/scheduled/sunday'),env)).text(),/予約Cut/);
+    assert.equal((await worker.fetch(get('/admin/series/scheduled/days/sunday/prompts/preview/1',token),env)).status,200);
+    assert.equal((await worker.fetch(post('/admin/series/scheduled/days/sunday/prompts/edit/1',{...form,publish_at:past},token),env)).status,303);
+    assert.equal((await worker.fetch(get(detail),env)).status,200);
+    assert.match(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
+  } finally {auth.restore()}
 });
