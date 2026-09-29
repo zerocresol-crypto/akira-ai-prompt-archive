@@ -9,6 +9,7 @@ function database() {
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0003_schedule.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0004_model_name.sql',import.meta.url),'utf8'));
   return { batch(statements){db.exec('BEGIN');try{const out=statements.map(st=>st.run());db.exec('COMMIT');return out}catch(error){db.exec('ROLLBACK');throw error}}, prepare(sql) {
     const statement=db.prepare(sql);
     return {bind(...args){this.args=args;return this}, first(){return statement.get(...(this.args||[]))||null}, all(){return {results:statement.all(...(this.args||[]))}}, run(){const result=statement.run(...(this.args||[]));return {meta:{last_row_id:Number(result.lastInsertRowid)}}}};
@@ -51,6 +52,7 @@ test('admin registration and public draft isolation',async()=>{
     const path='/admin/series/autumn-cafe/days/monday/prompts/new';
     const form={slot:'morning',cut_number:'1',title:'窓辺のモンブラン',positive_prompt:'soft light',negative_prompt:'blurry',tags:'season:autumn:秋\ngenre:cafe:カフェ',status:'draft'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
+    assert.equal(DB.prepare('SELECT model_name FROM prompts WHERE id=1').first().model_name,'Q-ANIMA v1.0');
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,404);
     const draftList=await (await worker.fetch(get('/admin/series/autumn-cafe/days/monday',token),env)).text();
     assert.match(draftList,/https:\/\/prompt-archive\.atelier-notes\.workers\.dev\/series\/autumn-cafe\/monday\/morning\/1/);
@@ -128,6 +130,15 @@ test('Threads embed input stores only a validated post URL and renders safely',a
   } finally {auth.restore()}
 });
 
+test('model migration updates previously saved cuts',()=>{
+  const db=new DatabaseSync(':memory:');
+  db.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0003_schedule.sql',import.meta.url),'utf8'));
+  db.exec("INSERT INTO series(slug,title) VALUES('week','Week'); INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sun','Sun',0); INSERT INTO prompts(day_id,slot,cut_number,title,positive_prompt,model_name) VALUES(1,'morning',1,'Legacy','light','Anima-Base')");
+  db.exec(readFileSync(new URL('../migrations/0004_model_name.sql',import.meta.url),'utf8'));
+  assert.equal(db.prepare('SELECT model_name FROM prompts WHERE id=1').get().model_name,'Q-ANIMA v1.0');
+});
+
 
 test('six-cut import stays draft and rolls back on duplicate',async()=>{
   const DB=database();
@@ -136,6 +147,7 @@ test('six-cut import stays draft and rolls back on duplicate',async()=>{
   const entries=['morning','evening'].flatMap(slot=>[1,2,3].map(cut_number=>({slot,cut_number,title:`${slot} ${cut_number}`,positive_prompt:`prompt ${cut_number}`,tags:['season:autumn:秋']})));
   const raw=JSON.stringify(entries);
   assert.equal(parseImport(raw,0).length,6);
+  assert.ok(parseImport(raw,0).every(p=>p.model_name==='Q-ANIMA v1.0'));
   assert.equal(await importDrafts(DB,{id:1,day_order:0},raw),6);
   assert.equal(DB.prepare("SELECT COUNT(*) count FROM prompts WHERE status='draft'").first().count,6);
   assert.equal(DB.prepare('SELECT COUNT(*) count FROM prompt_tags').first().count,6);
