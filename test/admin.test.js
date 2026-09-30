@@ -63,7 +63,7 @@ test('admin registration and public draft isolation',async()=>{
     assert.equal(DB.prepare('SELECT model_name FROM prompts WHERE id=1').first().model_name,'Q-ANIMA v1.0');
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,404);
     const draftList=await (await worker.fetch(get('/admin/series/autumn-cafe/days/monday',token),env)).text();
-    assert.match(draftList,/https:\/\/prompt-archive\.atelier-notes\.workers\.dev\/series\/autumn-cafe\/monday\/morning\/1/);
+    assert.match(draftList,/https:\/\/prompt-archive\.atelier-notes\.workers\.dev\/series\/autumn-cafe\/monday\/morning/);
     assert.match(draftList,/data-copy="public-url-1"/);
     const dayHtml=await (await worker.fetch(get('/admin/series/autumn-cafe/days/monday',token),env)).text();
     assert.match(dayHtml,/登録済み 1 \/ 最大 6 カット/);
@@ -83,7 +83,7 @@ test('admin registration and public draft isolation',async()=>{
     assert.match(previewHtml,/data-copy="public-url-1"/);
     const edit='/admin/series/autumn-cafe/days/monday/prompts/edit/1';
     assert.equal((await worker.fetch(post(edit,{...form,status:'published'},token),env)).status,303);
-    const detail=await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env);
+    const detail=await worker.fetch(get('/series/autumn-cafe/monday/morning'),env);
     assert.equal(detail.status,200);
     const html=await detail.text();
     assert.match(html,/soft light/);assert.match(html,/Negative Prompt/);assert.match(html,/カフェ/);
@@ -94,7 +94,7 @@ test('admin registration and public draft isolation',async()=>{
     assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/evening/2'),env)).status,404);
     const invalid=await worker.fetch(post(edit,{...form,tags:'invalid tag'},token),env);
     assert.match(await invalid.text(),/タグはカテゴリー/);
-    assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,200);
+    assert.equal((await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).status,302);
     const withoutR2=await (await worker.fetch(get(edit,token),env)).text();
     assert.doesNotMatch(withoutR2,/type=\"file\"/);
     assert.match(withoutR2,/画像URL/);
@@ -110,7 +110,7 @@ test('admin registration and public draft isolation',async()=>{
     const imagePath=DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url;
     assert.match(imagePath,/^\/media\/art\//);
     assert.equal((await worker.fetch(get(imagePath),env)).status,200);
-    assert.match(await (await worker.fetch(get('/series/autumn-cafe/monday/morning/1'),env)).text(),/\/media\/art\//);
+    assert.match(await (await worker.fetch(get('/series/autumn-cafe/monday/morning'),env)).text(),/\/media\/art\//);
   } finally {auth.restore()}
 });
 
@@ -126,18 +126,45 @@ test('Threads embed input stores only a validated post URL and renders safely',a
     const form={slot:'morning',cut_number:'1',title:'Threadsの作品',positive_prompt:'light',image_url:embed,status:'published'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
     assert.equal(DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url,postUrl);
-    const detail=await (await worker.fetch(get('/series/week/sunday/morning/1'),env)).text();
+    const detail=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
     assert.match(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/\@akira\.lether\/post\/Dd4kbKsiVgx"/);
     assert.match(detail,/www\.threads\.com\/embed\.js/);
     assert.doesNotMatch(detail,/alert\(1\)|property="og:image"/);
     const list=await (await worker.fetch(get('/series/week/sunday'),env)).text();
-    assert.match(list,/class="cut-art cut-morning cut-1"/);
+    assert.match(list,/href="\/series\/week\/sunday\/morning"/);
     assert.match(list,/Threadsの作品/);
     assert.doesNotMatch(list,/Threads<br>投稿を見る/);
     assert.doesNotMatch(list,/<img[^>]+threads\.com/);
     const invalid=await worker.fetch(post(path,{...form,cut_number:'2',image_url:'<blockquote data-text-post-permalink="https://evil.example/post/1"></blockquote>'},token),env);
     assert.match(await invalid.text(),/Threads埋め込みタグの投稿URL/);
   } finally {auth.restore()}
+});
+
+test('morning and evening pages group three cuts with separate embeds and copy targets',async()=>{
+  const DB=database(),env=envFor(DB);
+  DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+  DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sunday','Sunday',0)").run();
+  for(const slot of ['morning','evening']) for(let n=1;n<=3;n++) {
+    DB.prepare('INSERT INTO prompts(day_id,slot,cut_number,title,image_url,positive_prompt,negative_prompt,status) VALUES(1,?,?,?,?,?,?,?)').bind(slot,n,`${slot} ${n}`,`https://www.threads.com/@akira.lether/post/Post${slot}${n}`,`positive ${slot} ${n}`,`negative ${slot} ${n}`,'published').run();
+  }
+  const day=await (await worker.fetch(get('/series/week/sunday'),env)).text();
+  assert.match(day,/href="\/series\/week\/sunday\/morning"/);
+  assert.match(day,/href="\/series\/week\/sunday\/evening"/);
+  assert.doesNotMatch(day,/href="\/series\/week\/sunday\/morning\/1"/);
+  const morning=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
+  for(let n=1;n<=3;n++) {
+    assert.match(morning,new RegExp(`id="cut-${n}"`));
+    assert.match(morning,new RegExp(`Postmorning${n}`));
+    assert.match(morning,new RegExp(`positive morning ${n}`));
+    assert.match(morning,new RegExp(`data-copy="positive-${n}"`));
+  }
+  assert.doesNotMatch(morning,/Postevening/);
+  const evening=await (await worker.fetch(get('/series/week/sunday/evening'),env)).text();
+  assert.match(evening,/Postevening3/);
+  assert.doesNotMatch(evening,/Postmorning/);
+  const old=await worker.fetch(get('/series/week/sunday/morning/2'),env);
+  assert.equal(old.status,302);
+  assert.equal(old.headers.get('location'),'https://archive.example/series/week/sunday/morning#cut-2');
 });
 
 test('model migration updates previously saved cuts',()=>{
@@ -245,7 +272,8 @@ test('scheduled series and cuts stay hidden until their JST publication time',as
     assert.doesNotMatch(await (await worker.fetch(get('/series/scheduled/sunday'),env)).text(),/予約Cut/);
     assert.equal((await worker.fetch(get('/admin/series/scheduled/days/sunday/prompts/preview/1',token),env)).status,200);
     assert.equal((await worker.fetch(post('/admin/series/scheduled/days/sunday/prompts/edit/1',{...form,publish_at:past},token),env)).status,303);
-    assert.equal((await worker.fetch(get(detail),env)).status,200);
+    assert.equal((await worker.fetch(get(detail),env)).status,302);
+    assert.equal((await worker.fetch(get('/series/scheduled/sunday/morning'),env)).status,200);
     assert.match(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
   } finally {auth.restore()}
 });
