@@ -131,7 +131,9 @@ test('Threads embed input stores only a validated post URL and renders safely',a
     assert.match(detail,/www\.threads\.com\/embed\.js/);
     assert.doesNotMatch(detail,/alert\(1\)|property="og:image"/);
     const list=await (await worker.fetch(get('/series/week/sunday'),env)).text();
-    assert.match(list,/Threads<br>投稿を見る/);
+    assert.match(list,/class="cut-art cut-morning cut-1"/);
+    assert.match(list,/Threadsの作品/);
+    assert.doesNotMatch(list,/Threads<br>投稿を見る/);
     assert.doesNotMatch(list,/<img[^>]+threads\.com/);
     const invalid=await worker.fetch(post(path,{...form,cut_number:'2',image_url:'<blockquote data-text-post-permalink="https://evil.example/post/1"></blockquote>'},token),env);
     assert.match(await invalid.text(),/Threads埋め込みタグの投稿URL/);
