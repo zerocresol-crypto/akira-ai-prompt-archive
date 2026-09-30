@@ -26,8 +26,8 @@ const scheduleField = row => `${input('publish_at','予約公開日時（日本�
 const visibilityLabel = row => row.status==='draft'?'下書き':row.publish_at && row.publish_at>new Date().toISOString()?`予約中 ${jstInput(row.publish_at)} JST`:'公開中';
 const MODEL_NAME = 'Q-ANIMA v1.0';
 const daySlugs = ['sunday','monday','tuesday','wednesday','thursday','friday','recap'];
-const publicUrl = (env,s,d,p) => new URL(`/series/${encodeURIComponent(s.slug)}/${encodeURIComponent(d.slug)}/${p.slot}/${p.cut_number}`,env.PUBLIC_ORIGIN||'https://prompt-archive.atelier-notes.workers.dev').href;
-const publicLink = (env,s,d,p) => `<div><small>Threads予約投稿に貼る公開予定URL（公開前は404になります）</small><p><code id="public-url-${p.id}" style="overflow-wrap:anywhere;user-select:all">${esc(publicUrl(env,s,d,p))}</code></p><button type="button" data-copy="public-url-${p.id}">URLをコピー</button><p><small>シリーズ・日・時間帯・Cut番号を変更するとURLも変わります。</small></p></div>`;
+const publicUrl = (env,s,d,p) => new URL(`/series/${encodeURIComponent(s.slug)}/${encodeURIComponent(d.slug)}/${p.slot}`,env.PUBLIC_ORIGIN||'https://prompt-archive.atelier-notes.workers.dev').href;
+const publicLink = (env,s,d,p) => `<div><small>Threads予約投稿に貼る朝・夜単位の公開予定URL（公開前は404になります）</small><p><code id="public-url-${p.id}" style="overflow-wrap:anywhere;user-select:all">${esc(publicUrl(env,s,d,p))}</code></p><button type="button" data-copy="public-url-${p.id}">URLをコピー</button><p><small>同じ時間帯のCUT 1〜3で共通です。シリーズ・日・時間帯を変更するとURLも変わります。</small></p></div>`;
 const copyPath = (s,d,p) => `/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/copy/${p.id}`;
 
 const decoded = v => { try { return JSON.parse(atob(v.replace(/-/g,'+').replace(/_/g,'/'))); } catch { return null; } };
