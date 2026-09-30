@@ -210,7 +210,7 @@ test('copy form carries shared fields to another day and starts as a draft',asyn
   } finally {auth.restore()}
 });
 
-test('recap cut form defaults to recap and saves on the first attempt',async()=>{
+test('recap accepts morning and evening cuts while retaining the legacy recap slot',async()=>{
   const DB=database(),env=envFor(DB),auth=await setupToken();
   try {
     const token=await auth.token();
@@ -218,13 +218,40 @@ test('recap cut form defaults to recap and saves on the first attempt',async()=>
     DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'recap','Recap',6)").run();
     const path='/admin/series/week/days/recap/prompts/new';
     const html=await (await worker.fetch(get(path,token),env)).text();
-    assert.match(html,/<option value="recap" selected>総集編<\/option>/);
-    assert.doesNotMatch(html,/<option value="morning"/);
+    assert.match(html,/<option value="morning" selected>朝<\/option>/);
+    assert.match(html,/<option value="evening" >夜<\/option>/);
+    assert.match(html,/<option value="recap" >総集編（従来形式）<\/option>/);
     const res=await worker.fetch(post(path,{slot:'recap',cut_number:'1',title:'総集編',positive_prompt:'light',negative_prompt:'blurry',status:'published'},token),env);
     assert.equal(res.status,303);
     assert.equal(res.headers.get('location'),'/admin/series/week/days/recap');
     assert.equal(DB.prepare('SELECT COUNT(*) count FROM prompts WHERE day_id=1').first().count,1);
-    assert.match(await (await worker.fetch(get(res.headers.get('location'),token),env)).text(),/登録済み 1 \/ 最大 3 カット/);
+    assert.match(await (await worker.fetch(get(res.headers.get('location'),token),env)).text(),/登録済み 1 \/ 最大 6 カット/);
+  } finally {auth.restore()}
+});
+
+test('recap supports six morning and evening cuts with separate release times',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'recap','Recap',6)").run();
+    const entries=['morning','evening'].flatMap(slot=>[1,2,3].map(cut_number=>({slot,cut_number,title:`${slot} ${cut_number}`,positive_prompt:`prompt ${cut_number}`})));
+    assert.equal(parseImport(JSON.stringify(entries),6).length,6);
+    assert.equal(await importDrafts(DB,{id:1,day_order:6},JSON.stringify(entries)),6);
+    const list='/admin/series/week/days/recap';
+    const html=await (await worker.fetch(get(list,token),env)).text();
+    assert.match(html,/登録済み 6 \/ 最大 6 カット/);
+    assert.match(html,/slots\/morning/);
+    assert.match(html,/slots\/evening/);
+    assert.equal((await worker.fetch(post(list+'/slots/morning',{status:'published',publish_at:'2020-10-04T05:00'},token),env)).status,303);
+    assert.equal((await worker.fetch(get('/series/week/recap/morning'),env)).status,200);
+    assert.equal((await worker.fetch(get('/series/week/recap/evening'),env)).status,404);
+    assert.equal((await worker.fetch(post(list+'/slots/evening',{status:'published',publish_at:'2020-10-04T18:00'},token),env)).status,303);
+    assert.equal((await worker.fetch(get('/series/week/recap/evening'),env)).status,200);
+    const publicDay=await (await worker.fetch(get('/series/week/recap'),env)).text();
+    assert.match(publicDay,/href="\/series\/week\/recap\/morning"/);
+    assert.match(publicDay,/href="\/series\/week\/recap\/evening"/);
+    assert.match(await (await worker.fetch(post(list+'/prompts/new',{slot:'recap',cut_number:'1',title:'extra',positive_prompt:'light'},token),env)).text(),/既に6カット/);
   } finally {auth.restore()}
 });
 
