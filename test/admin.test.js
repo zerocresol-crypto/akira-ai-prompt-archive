@@ -83,6 +83,10 @@ test('admin registration and public draft isolation',async()=>{
     assert.match(previewHtml,/data-copy="public-url-1"/);
     const edit='/admin/series/autumn-cafe/days/monday/prompts/edit/1';
     assert.equal((await worker.fetch(post(edit,{...form,status:'published'},token),env)).status,303);
+    const morningSlot='/admin/series/autumn-cafe/days/monday/slots/morning';
+    assert.match(await (await worker.fetch(post(morningSlot,{status:'published'},token),env)).text(),/CUT 1〜3をすべて登録/);
+    for(let n=2;n<=3;n++)assert.equal((await worker.fetch(post(path,{...form,cut_number:String(n),title:`窓辺のモンブラン ${n}`},token),env)).status,303);
+    assert.equal((await worker.fetch(post(morningSlot,{status:'published'},token),env)).status,303);
     const detail=await worker.fetch(get('/series/autumn-cafe/monday/morning'),env);
     assert.equal(detail.status,200);
     const html=await detail.text();
@@ -126,6 +130,7 @@ test('Threads embed input stores only a validated post URL and renders safely',a
     const form={slot:'morning',cut_number:'1',title:'Threadsの作品',positive_prompt:'light',image_url:embed,status:'published'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
     assert.equal(DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url,postUrl);
+    DB.prepare("UPDATE prompts SET status='published' WHERE id=1").run();
     const detail=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
     assert.match(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/\@akira\.lether\/post\/Dd4kbKsiVgx"/);
     assert.match(detail,/www\.threads\.com\/embed\.js/);
@@ -195,7 +200,8 @@ test('copy form carries shared fields to another day and starts as a draft',asyn
     assert.match(page,/action="\/admin\/series\/week\/days\/mon\/prompts\/new"/);
     assert.match(page,/warm light/);assert.match(page,/bad hands/);assert.match(page,/season:autumn:秋/);
     assert.doesNotMatch(page,/one\.jpg|2026-10-01T00:00/);
-    assert.match(page,/name="status"[^>]*>[\s\S]*?<option value="draft" selected/);
+    assert.doesNotMatch(page,/name="status"/);
+    assert.match(page,/公開予約は日別管理でまとめて設定/);
     assert.match(page,/name="image_url"[^>]*>\s*<\/textarea>/);
     const sameDay=await (await worker.fetch(get(copy,token),env)).text();
     assert.match(sameDay,/<option value="2" selected>Cut 2<\/option>/);
@@ -275,7 +281,17 @@ test('scheduled series and cuts stay hidden until their JST publication time',as
     assert.doesNotMatch(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
     assert.doesNotMatch(await (await worker.fetch(get('/series/scheduled/sunday'),env)).text(),/予約Cut/);
     assert.equal((await worker.fetch(get('/admin/series/scheduled/days/sunday/prompts/preview/1',token),env)).status,200);
-    assert.equal((await worker.fetch(post('/admin/series/scheduled/days/sunday/prompts/edit/1',{...form,publish_at:past},token),env)).status,303);
+    for(let n=2;n<=3;n++)assert.equal((await worker.fetch(post(create,{...form,cut_number:String(n),title:`予約Cut ${n}`},token),env)).status,303);
+    const slot='/admin/series/scheduled/days/sunday/slots/morning';
+    assert.equal((await worker.fetch(post(slot,{status:'published',publish_at:future},token),env)).status,303);
+    const scheduled=DB.prepare("SELECT status,publish_at FROM prompts WHERE slot='morning' ORDER BY cut_number").all().results;
+    assert.equal(scheduled.length,3);
+    assert.ok(scheduled.every(p=>p.status==='published'&&p.publish_at===scheduled[0].publish_at));
+    assert.match(await (await worker.fetch(get('/admin/series/scheduled/days/sunday',token),env)).text(),/予約中 2099-10-04T05:00 JST/);
+    assert.equal((await worker.fetch(post('/admin/series/scheduled/days/sunday/prompts/edit/1',{...form,publish_at:past,status:'draft'},token),env)).status,303);
+    assert.equal(DB.prepare('SELECT publish_at FROM prompts WHERE id=1').first().publish_at,scheduled[0].publish_at);
+    assert.equal((await worker.fetch(get(detail),env)).status,404);
+    assert.equal((await worker.fetch(post(slot,{status:'published',publish_at:past},token),env)).status,303);
     assert.equal((await worker.fetch(get(detail),env)).status,302);
     assert.equal((await worker.fetch(get('/series/scheduled/sunday/morning'),env)).status,200);
     assert.match(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
