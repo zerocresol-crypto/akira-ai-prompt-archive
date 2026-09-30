@@ -26,5 +26,5 @@ export function normalizeImageReference(value) {
 export function threadsEmbed(url) {
   const safe = threadsPostUrl(url);
   if (!safe) return '';
-  return `<blockquote class="text-post-media" data-text-post-permalink="${safe}" data-text-post-version="0" style="background:#fff;border:1px solid #0003;border-radius:16px;max-width:650px;min-width:270px;margin:16px auto;padding:28px;text-align:center"><a href="${safe}" target="_blank" rel="noopener noreferrer">Threadsで投稿を見る ↗</a></blockquote><script async src="https://www.threads.com/embed.js"></script>`;
+  return `<blockquote class="text-post-media" data-text-post-permalink="${safe}" data-text-post-version="0" style="background:#123448;color:#d7f8ff;border:1px solid #42849b;border-radius:10px;max-width:650px;margin:12px 0;padding:12px;text-align:center"><a href="${safe}" target="_blank" rel="noopener noreferrer" style="color:#d7f8ff;text-decoration:underline;font-weight:600">Threadsで元の投稿を開く ↗</a></blockquote><script async src="https://www.threads.com/embed.js"></script>`;
 }
