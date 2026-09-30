@@ -115,7 +115,7 @@ export async function admin(request,env,parts) {
         if(!v('title')||v('title').length>200||!validDate(v('date'))||!['0','1','2','3','4','5','6'].includes(v('day_order')))throw Error('日別情報の入力を確認してください');
         const slug=daySlugs[Number(v('day_order'))];
         if(parts[4]==='new'){await env.DB.prepare('INSERT INTO days(series_id,slug,title,date,day_order,description) VALUES(?,?,?,?,?,?)').bind(s.id,slug,v('title'),v('date')||null,Number(v('day_order')),v('description')).run()}else{const d=await env.DB.prepare('SELECT id FROM days WHERE id=? AND series_id=?').bind(parts[5],s.id).first();if(!d)return deny('Not Found',404);await env.DB.prepare('UPDATE days SET slug=?,title=?,date=?,day_order=?,description=? WHERE id=?').bind(slug,v('title'),v('date')||null,Number(v('day_order')),v('description'),d.id).run()}
-        return redirect(`/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(v('slug'))}`);
+        return redirect(`/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(slug)}`);
       }
       if(parts[1]==='series' && parts[3]==='days' && parts[5]==='import' && parts.length===6) {
         const d=await env.DB.prepare('SELECT d.id,d.day_order FROM days d JOIN series s ON s.id=d.series_id WHERE s.slug=? AND d.slug=?').bind(parts[2],parts[4]).first();
