@@ -171,6 +171,24 @@ test('copy form carries shared fields to another day and starts as a draft',asyn
   } finally {auth.restore()}
 });
 
+test('recap cut form defaults to recap and saves on the first attempt',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','draft')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'recap','Recap',6)").run();
+    const path='/admin/series/week/days/recap/prompts/new';
+    const html=await (await worker.fetch(get(path,token),env)).text();
+    assert.match(html,/<option value="recap" selected>総集編<\/option>/);
+    assert.doesNotMatch(html,/<option value="morning"/);
+    const res=await worker.fetch(post(path,{slot:'recap',cut_number:'1',title:'総集編',positive_prompt:'light',negative_prompt:'blurry',status:'published'},token),env);
+    assert.equal(res.status,303);
+    assert.equal(res.headers.get('location'),'/admin/series/week/days/recap');
+    assert.equal(DB.prepare('SELECT COUNT(*) count FROM prompts WHERE day_id=1').first().count,1);
+    assert.match(await (await worker.fetch(get(res.headers.get('location'),token),env)).text(),/登録済み 1 \/ 最大 3 カット/);
+  } finally {auth.restore()}
+});
+
 
 test('six-cut import stays draft and rolls back on duplicate',async()=>{
   const DB=database();
