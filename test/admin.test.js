@@ -152,12 +152,16 @@ test('morning and evening pages group three cuts with separate embeds and copy t
   assert.match(day,/href="\/series\/week\/sunday\/evening"/);
   assert.doesNotMatch(day,/href="\/series\/week\/sunday\/morning\/1"/);
   const morning=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
+  assert.equal((morning.match(/class="text-post-media"/g)||[]).length,1);
+  assert.equal((morning.match(/www\.threads\.com\/embed\.js/g)||[]).length,1);
+  assert.equal((morning.match(/<details>/g)||[]).length,6);
   for(let n=1;n<=3;n++) {
     assert.match(morning,new RegExp(`id="cut-${n}"`));
     assert.match(morning,new RegExp(`Postmorning${n}`));
     assert.match(morning,new RegExp(`positive morning ${n}`));
     assert.match(morning,new RegExp(`data-copy="positive-${n}"`));
   }
+  assert.match(morning,/CUT 2 のThreads投稿を見る/);
   assert.doesNotMatch(morning,/Postevening/);
   const evening=await (await worker.fetch(get('/series/week/sunday/evening'),env)).text();
   assert.match(evening,/Postevening3/);
