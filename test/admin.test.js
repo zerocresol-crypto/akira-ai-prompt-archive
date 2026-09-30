@@ -52,7 +52,11 @@ test('admin registration and public draft isolation',async()=>{
     assert.doesNotMatch(dayForm,/name="slug"/);
     res=await worker.fetch(post('/admin/series/autumn-cafe/days/new',{slug:'arbitrary',title:'モンブラン',date:'2026-10-05',day_order:'1'},token),env);
     assert.equal(res.status,303);
+    assert.equal(res.headers.get('location'),'/admin/series/autumn-cafe/days/monday');
     assert.equal(DB.prepare('SELECT slug FROM days WHERE series_id=1').first().slug,'monday');
+    assert.equal((await worker.fetch(get(res.headers.get('location'),token),env)).status,200);
+    const edited=await worker.fetch(post('/admin/series/autumn-cafe/days/edit/1',{title:'モンブラン',date:'2026-10-05',day_order:'1'},token),env);
+    assert.equal(edited.headers.get('location'),'/admin/series/autumn-cafe/days/monday');
     const path='/admin/series/autumn-cafe/days/monday/prompts/new';
     const form={slot:'morning',cut_number:'1',title:'窓辺のモンブラン',positive_prompt:'soft light',negative_prompt:'blurry',tags:'season:autumn:秋\ngenre:cafe:カフェ',status:'draft'};
     assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
