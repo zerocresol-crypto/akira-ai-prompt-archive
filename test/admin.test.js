@@ -10,6 +10,7 @@ function database() {
   db.exec(readFileSync(new URL('../migrations/0001_init.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0003_schedule.sql',import.meta.url),'utf8'));
   db.exec(readFileSync(new URL('../migrations/0004_model_name.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0005_slot_threads.sql',import.meta.url),'utf8'));
   return { batch(statements){db.exec('BEGIN');try{const out=statements.map(st=>st.run());db.exec('COMMIT');return out}catch(error){db.exec('ROLLBACK');throw error}}, prepare(sql) {
     const statement=db.prepare(sql);
     return {bind(...args){this.args=args;return this}, first(){return statement.get(...(this.args||[]))||null}, all(){return {results:statement.all(...(this.args||[]))}}, run(){const result=statement.run(...(this.args||[]));return {meta:{last_row_id:Number(result.lastInsertRowid)}}}};
@@ -145,7 +146,6 @@ test('Threads embed input stores only a validated post URL and renders safely',a
   } finally {auth.restore()}
 });
 
-
 test('Threads mobile share URL is saved and displayed as a link',async()=>{
   const DB=database(),env=envFor(DB),auth=await setupToken();
   try {
@@ -160,6 +160,26 @@ test('Threads mobile share URL is saved and displayed as a link',async()=>{
     const detail=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
     assert.match(detail,/href="https:\/\/www\.threads\.com\/share\/BARPUixNMW"/);
     assert.doesNotMatch(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/share/);
+  } finally {auth.restore()}
+});
+
+test('slot Threads URL is set once for three cuts and takes priority over legacy cut links',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sunday','Sunday',0)").run();
+    for(let n=1;n<=3;n++) DB.prepare("INSERT INTO prompts(day_id,slot,cut_number,title,positive_prompt,status,image_url) VALUES(1,'morning',?,?,?,?,?)").bind(n,`Cut ${n}`,`prompt ${n}`,'published','https://www.threads.com/@akira.lether/post/OldCut').run();
+    const path='/admin/series/week/days/sunday/slots/morning';
+    const form={status:'published',threads_url:'https://www.threads.com/share/BARPUixNMW/'};
+    assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
+    assert.equal(DB.prepare("SELECT threads_url FROM slot_threads WHERE day_id=1 AND slot='morning'").first().threads_url,'https://www.threads.com/share/BARPUixNMW');
+    assert.equal(DB.prepare("SELECT COUNT(*) AS n FROM prompts WHERE image_url='https://www.threads.com/@akira.lether/post/OldCut'").first().n,3);
+    const detail=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
+    assert.match(detail,/href="https:\/\/www\.threads\.com\/share\/BARPUixNMW"/);
+    assert.doesNotMatch(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/share/);
+    const invalid=await worker.fetch(post(path,{...form,threads_url:'https://evil.example/post/1'},token),env);
+    assert.match(await invalid.text(),/一括公開のThreads URL/);
   } finally {auth.restore()}
 });
 
@@ -200,6 +220,7 @@ test('model migration updates previously saved cuts',()=>{
   db.exec(readFileSync(new URL('../migrations/0003_schedule.sql',import.meta.url),'utf8'));
   db.exec("INSERT INTO series(slug,title) VALUES('week','Week'); INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sun','Sun',0); INSERT INTO prompts(day_id,slot,cut_number,title,positive_prompt,model_name) VALUES(1,'morning',1,'Legacy','light','Anima-Base')");
   db.exec(readFileSync(new URL('../migrations/0004_model_name.sql',import.meta.url),'utf8'));
+  db.exec(readFileSync(new URL('../migrations/0005_slot_threads.sql',import.meta.url),'utf8'));
   assert.equal(db.prepare('SELECT model_name FROM prompts WHERE id=1').get().model_name,'Q-ANIMA v1.0');
 });
 
