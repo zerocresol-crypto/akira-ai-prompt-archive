@@ -145,6 +145,24 @@ test('Threads embed input stores only a validated post URL and renders safely',a
   } finally {auth.restore()}
 });
 
+
+test('Threads mobile share URL is saved and displayed as a link',async()=>{
+  const DB=database(),env=envFor(DB),auth=await setupToken();
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sunday','Sunday',0)").run();
+    const path='/admin/series/week/days/sunday/prompts/new';
+    const form={slot:'morning',cut_number:'1',title:'共有投稿',positive_prompt:'light',image_url:'https://www.threads.com/share/BARPUixNMW/'};
+    assert.equal((await worker.fetch(post(path,form,token),env)).status,303);
+    assert.equal(DB.prepare('SELECT image_url FROM prompts WHERE id=1').first().image_url,'https://www.threads.com/share/BARPUixNMW');
+    DB.prepare("UPDATE prompts SET status='published' WHERE id=1").run();
+    const detail=await (await worker.fetch(get('/series/week/sunday/morning'),env)).text();
+    assert.match(detail,/href="https:\/\/www\.threads\.com\/share\/BARPUixNMW"/);
+    assert.doesNotMatch(detail,/data-text-post-permalink="https:\/\/www\.threads\.com\/share/);
+  } finally {auth.restore()}
+});
+
 test('morning and evening pages group three cuts with separate embeds and copy targets',async()=>{
   const DB=database(),env=envFor(DB);
   DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
