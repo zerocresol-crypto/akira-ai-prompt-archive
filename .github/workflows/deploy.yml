@@ -44,6 +44,8 @@ jobs:
             echo 'Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in repository Actions secrets.' >&2
             exit 1
           fi
+      - name: Apply database migrations
+        run: npx wrangler d1 migrations apply DB --remote --config wrangler.jsonc
       - name: Deploy public Worker
         run: npx wrangler deploy --config wrangler.jsonc
       - name: Deploy admin Worker
