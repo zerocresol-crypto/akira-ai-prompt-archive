@@ -54,3 +54,15 @@ R2が有効なアカウントでは専用バケット `prompt-archive-images` �
 ## 最初のシリーズ
 
 `0002_seed_autumn_cafe.sql` は「Autumn Café Collection」のシリーズと2026年10月4〜10日の7日分を**下書き**として登録する。各日のモチーフはアップルパイ、モンブラン、焼き芋ブリュレ、葡萄パフェ、パンプキンラテ、秋色コーヒースタンド、総集編。実際の完全版プロンプト・画像は含めない。管理画面でカットを登録し、内容を確認してから個別カットとシリーズを公開する。
+
+# Threads APIから投稿を選ぶ
+
+管理画面の日別ページで「Threadsの最近の投稿から選ぶ」を開くと、投稿済みの `@akira.lether` の最近50件を表示し、朝・夜・総集編の共通Threads URLとして登録できる。選択操作はCUTの公開状態や予約日時を変更しない。予約投稿が公開された後に操作する。候補が50件を超えて古くなった場合は共通URL欄へ直接貼り付ける。
+
+利用にはMeta for DevelopersでThreadsユースケースのアプリを作り、対象アカウントで認可した `threads_basic` 権限のThreadsユーザーアクセストークンが必要。長期トークンを取得して管理WorkerのSecret `THREADS_ACCESS_TOKEN` に設定する。値をGitHub、設定ファイル、会話に載せない。期限前の更新はMetaのトークン更新手順に従う。アカウント名を変更した場合のみ管理Workerの変数 `THREADS_USERNAME` も設定する（初期値 `akira.lether`）。
+
+```powershell
+npx wrangler secret put THREADS_ACCESS_TOKEN --config wrangler.admin.jsonc
+```
+
+未設定時は投稿候補画面に接続案内を表示し、これまでの手入力は継続して使える。投稿画像の直接URLは保存しない。公開ページは選択した投稿URLをThreads埋め込みとして表示する。
