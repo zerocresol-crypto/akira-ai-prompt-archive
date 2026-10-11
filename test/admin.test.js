@@ -183,6 +183,29 @@ test('slot Threads URL is set once for three cuts and takes priority over legacy
   } finally {auth.restore()}
 });
 
+test('administrator selects a published Threads post without changing cut visibility',async()=>{
+  const DB=database(),env={...envFor(DB),THREADS_ACCESS_TOKEN:'api-token'},auth=await setupToken();
+  const authFetch=globalThis.fetch;
+  try {
+    const token=await auth.token();
+    DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
+    DB.prepare("INSERT INTO days(series_id,slug,title,day_order) VALUES(1,'sunday','Sunday',0)").run();
+    DB.prepare("INSERT INTO prompts(day_id,slot,cut_number,title,positive_prompt,status) VALUES(1,'morning',1,'Cut 1','prompt','draft')").run();
+    globalThis.fetch=async(url,options)=>String(url).startsWith('https://graph.threads.net/')
+      ? new Response(JSON.stringify({data:[{id:'12345',username:'akira.lether',permalink:'https://www.threads.com/@akira.lether/post/NewPost',text:'朝の作品',timestamp:'2026-10-11T05:00:00+0000'}]}),{status:200})
+      : authFetch(url,options);
+    const path='/admin/series/week/days/sunday/threads/morning';
+    const picker=await worker.fetch(get(path,token),env);
+    assert.equal(picker.status,200);
+    assert.match(await picker.text(),/朝の作品/);
+    assert.equal((await worker.fetch(post(path,{thread_id:'12345'},token),env)).status,303);
+    assert.equal(DB.prepare("SELECT threads_url FROM slot_threads WHERE day_id=1 AND slot='morning'").first().threads_url,'https://www.threads.com/@akira.lether/post/NewPost');
+    assert.equal(DB.prepare('SELECT status FROM prompts WHERE id=1').first().status,'draft');
+    const invalid=await worker.fetch(post(path,{thread_id:'99999'},token),env);
+    assert.match(await invalid.text(),/最近の一覧に見つかりません/);
+  } finally {globalThis.fetch=authFetch;auth.restore()}
+});
+
 test('morning and evening pages group three cuts with separate embeds and copy targets',async()=>{
   const DB=database(),env=envFor(DB);
   DB.prepare("INSERT INTO series(slug,title,status) VALUES('week','Week','published')").run();
