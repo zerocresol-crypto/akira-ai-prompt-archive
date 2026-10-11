@@ -1,6 +1,7 @@
 import { uploadImage } from './images.js';
 import { template, importDrafts } from './import.js';
 import { normalizeImageReference, threadsUrl, threadsEmbed } from './threads.js';
+import { listOwnThreads } from './threads-api.js';
 const esc = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const opts = (items, value) => items.map(([key,name]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(name)}</option>`).join('');
 const input = (name,title,value='',type='text',required=false) => `<label>${title}<input type="${type}" name="${name}" value="${esc(value)}" ${required?'required':''}></label>`;
@@ -136,6 +137,15 @@ export async function admin(request,env,parts) {
         await env.DB.prepare('UPDATE prompts SET status=?,publish_at=?,updated_at=CURRENT_TIMESTAMP WHERE day_id=? AND slot=?').bind(v('status'),publishAt,d.id,slot).run();
         return redirect(`/admin/series/${encodeURIComponent(parts[2])}/days/${encodeURIComponent(parts[4])}`);
       }
+      if(parts[1]==='series' && parts[3]==='days' && parts[5]==='threads' && parts.length===7) {
+        const d=await env.DB.prepare('SELECT d.id,d.day_order FROM days d JOIN series s ON s.id=d.series_id WHERE s.slug=? AND d.slug=?').bind(parts[2],parts[4]).first();
+        if(!d||!['morning','evening','recap'].includes(parts[6])||(parts[6]==='recap'&&d.day_order!==6))return deny('Not Found',404);
+        const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
+        const chosen=posts.find(post=>post.id===v('thread_id'));
+        if(!chosen)throw Error('投稿が最近の一覧に見つかりません。再読み込みして選び直してください');
+        await env.DB.prepare('INSERT INTO slot_threads(day_id,slot,threads_url) VALUES(?,?,?) ON CONFLICT(day_id,slot) DO UPDATE SET threads_url=excluded.threads_url').bind(d.id,parts[6],chosen.permalink).run();
+        return redirect(`/admin/series/${encodeURIComponent(parts[2])}/days/${encodeURIComponent(parts[4])}`);
+      }
       if(parts[1]==='series' && parts[3]==='days' && parts[5]==='prompts' && ['new','edit'].includes(parts[6]) && parts.length===(parts[6]==='edit'?8:7)) {
         const d=await env.DB.prepare('SELECT d.id,d.day_order,s.slug series_slug FROM days d JOIN series s ON s.id=d.series_id WHERE s.slug=? AND d.slug=?').bind(parts[2],parts[4]).first();if(!d)return deny('Not Found',404);
         if(!['morning','evening','recap'].includes(v('slot'))||!['1','2','3'].includes(v('cut_number'))||(d.day_order!==6 && v('slot')==='recap')||!v('title')||!v('positive_prompt')||!validUrl(normalizeImageReference(v('image_url')))||!['','16:9','9:16'].includes(v('aspect_ratio')))throw Error('プロンプトの入力を確認してください');
@@ -163,6 +173,15 @@ export async function admin(request,env,parts) {
   if(parts[4]==='new'&&parts.length===5)return frame('日別ページ作成',`<form method="post">${dayFields()}<button>保存</button></form>`);
   if(parts[4]==='edit'&&parts.length===6){const d=await env.DB.prepare('SELECT * FROM days WHERE id=? AND series_id=?').bind(parts[5],s.id).first();return d?frame('日別ページ編集',`<form method="post">${dayFields(d)}<button>保存</button></form>`):deny('Not Found',404)}
   const d=await env.DB.prepare('SELECT * FROM days WHERE series_id=? AND slug=?').bind(s.id,parts[4]).first();if(!d)return deny('Not Found',404);
+  if(parts[5]==='threads' && parts.length===7){
+    const slot=parts[6];if(!['morning','evening','recap'].includes(slot)||(slot==='recap'&&d.day_order!==6))return deny('Not Found',404);
+    const back=`/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}`;
+    if(!env.THREADS_ACCESS_TOKEN)return frame('Threads投稿を選ぶ',`<section><p>Threads APIの接続がまだ設定されていません。</p><a href="${back}">日別管理に戻る</a></section>`);
+    try {
+      const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
+      return frame('Threads投稿を選ぶ',`<section><p>${esc(d.title)}・${esc({morning:'朝',evening:'夜',recap:'総集編'}[slot])}に登録する投稿を選択してください。選択しても公開状態や予約日時は変わりません。</p><a href="${back}">← 日別管理に戻る</a></section>${posts.length?posts.map(post=>`<section><p><small>${esc(post.timestamp)} · ${esc(post.mediaType)}</small></p><p>${esc(post.text||'本文なし')}</p><p><a href="${esc(post.permalink)}" target="_blank" rel="noopener noreferrer">Threadsで投稿を確認 ↗</a></p><form method="post"><input type="hidden" name="thread_id" value="${esc(post.id)}"><button>この投稿を登録</button></form></section>`).join(''):'<section>最近の投稿がありません。投稿後に再読み込みしてください。</section>'}`);
+    } catch(e){return frame('Threads投稿を取得できません',`<section><p>${esc(e.message)}</p><a href="${back}">日別管理に戻る</a></section>`)}
+  }
   if(parts.length===5){
     const prompts=await env.DB.prepare("SELECT p.*,(SELECT COUNT(*) FROM prompt_tags pt WHERE pt.prompt_id=p.id) tag_count FROM prompts p WHERE p.day_id=? ORDER BY CASE p.slot WHEN 'morning' THEN 0 WHEN 'evening' THEN 1 ELSE 2 END,p.cut_number").bind(d.id).all();
     const items=prompts.results, maximum=6;
@@ -170,7 +189,7 @@ export async function admin(request,env,parts) {
     const sharedRows=await env.DB.prepare('SELECT slot,threads_url FROM slot_threads WHERE day_id=?').bind(d.id).all();
     const sharedLinks=Object.fromEntries(sharedRows.results.map(row=>[row.slot,row.threads_url]));
     const missingImage=items.filter(p=>!p.image_url&&!sharedLinks[p.slot]).length;
-    const slotForms=(d.day_order===6&&items.some(p=>p.slot==='recap')?['morning','evening','recap']:['morning','evening']).map(slot=>{const cuts=items.filter(p=>p.slot===slot);const same=cuts.length>0&&cuts.every(p=>p.status===cuts[0].status&&p.publish_at===cuts[0].publish_at);const row=same?cuts[0]:null;return `<section><h2>${{morning:'朝',evening:'夜',recap:'総集編'}[slot]} · CUT 1〜3 一括公開</h2><p>登録済み ${cuts.length}/3 カット · ${same?esc(visibilityLabel(row)):cuts.length?'公開設定が異なります。下記から時刻を揃えてください。':'未登録'}</p><form method="post" action="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/slots/${slot}">${status(row?.status||'draft')}${scheduleField(row)}<label>Threads投稿URL（3カット共通）<input type="url" name="threads_url" value="${esc(sharedLinks[slot]||'')}" placeholder="https://www.threads.com/share/…"></label><small>投稿URLまたはスマホの共有URLを入力できます。共有URLは投稿へのリンクとして表示します。CUT個別の画像登録は番外編などに使用できます。</small><button>3カットをまとめて保存</button></form><small>公開・予約はCUT 1〜3が揃ってから設定できます。下書きへ戻す操作は登録済みのカットすべてに反映します。</small></section>`}).join('');
+    const slotForms=(d.day_order===6&&items.some(p=>p.slot==='recap')?['morning','evening','recap']:['morning','evening']).map(slot=>{const cuts=items.filter(p=>p.slot===slot);const same=cuts.length>0&&cuts.every(p=>p.status===cuts[0].status&&p.publish_at===cuts[0].publish_at);const row=same?cuts[0]:null;return `<section><h2>${{morning:'朝',evening:'夜',recap:'総集編'}[slot]} · CUT 1〜3 一括公開</h2><p>登録済み ${cuts.length}/3 カット · ${same?esc(visibilityLabel(row)):cuts.length?'公開設定が異なります。下記から時刻を揃えてください。':'未登録'}</p><p><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/threads/${slot}">Threadsの最近の投稿から選ぶ →</a></p><form method="post" action="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/slots/${slot}">${status(row?.status||'draft')}${scheduleField(row)}<label>Threads投稿URL（3カット共通）<input type="url" name="threads_url" value="${esc(sharedLinks[slot]||'')}" placeholder="https://www.threads.com/share/…"></label><small>投稿URLまたはスマホの共有URLを入力できます。共有URLは投稿へのリンクとして表示します。CUT個別の画像登録は番外編などに使用できます。</small><button>3カットをまとめて保存</button></form><small>公開・予約はCUT 1〜3が揃ってから設定できます。下書きへ戻す操作は登録済みのカットすべてに反映します。</small></section>`}).join('');
     const summary=`<section><h2>公開準備</h2><p>登録済み ${items.length} / 最大 ${maximum} カット · 公開中 ${items.filter(p=>p.status==='published'&&(!p.publish_at||p.publish_at<=new Date().toISOString())).length} カット · 予約中 ${items.filter(p=>p.status==='published'&&p.publish_at>new Date().toISOString()).length} カット</p><p>画像未登録 ${missingImage} 件 · 制作意図未登録 ${missingDescription} 件 · タグ未登録 ${missingTags} 件</p><small>画像とプロンプトの対応は各プレビューで確認してください。シリーズが下書きの場合、公開中のカットも一般公開されません。</small></section>`;
     return frame(`${s.title} / ${d.title}`,`${summary}${slotForms}<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/edit/${d.id}">日を編集</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/new">カットを追加</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/import">まとめて取り込む</a></section>${items.map(p=>{const missing=[!p.image_url&&!sharedLinks[p.slot]?'画像':null,!p.description?.trim()?'制作意図':null,!p.tag_count?'タグ':null].filter(Boolean);return `<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/edit/${p.id}">${esc({morning:'朝',evening:'夜',recap:'総集編'}[p.slot]||p.slot)} Cut ${p.cut_number}：${esc(p.title)}</a> <small>${esc(visibilityLabel(p))}</small> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}/prompts/preview/${p.id}">プレビュー</a> · <a href="${copyPath(s,d,p)}">コピーして作成</a>${missing.length?`<p><small>未登録: ${missing.join('・')}</small></p>`:''}${publicLink(env,s,d,p)}</section>`}).join('')}`);
   }
