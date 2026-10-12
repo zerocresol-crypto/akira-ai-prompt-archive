@@ -7,6 +7,7 @@
     "PUBLIC_ORIGIN": "https://prompt-archive.atelier-notes.workers.dev"
   },
   "compatibility_date": "2026-09-28",
+  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "prompt-archive-images" }],
   "d1_databases": [
     {
       "binding": "DB",
