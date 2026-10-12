@@ -14,9 +14,9 @@ export async function uploadImage(bucket,file) {
   return `/media/${key}`;
 }
 export async function saveThreadsCover(bucket,sourceUrl,fetcher=fetch) {
-  if(!bucket)throw Error('画像ストレージが未設定です');
   let url;try{url=new URL(sourceUrl)}catch{throw Error('Threadsの画像URLを確認してください')}
   if(url.protocol!=='https:'||!/(^|\.)(fbcdn\.net|cdninstagram\.com)$/.test(url.hostname))throw Error('Threadsの画像配信元を確認できません');
+  if(!bucket)return url.href;
   const response=await fetcher(url.href,{redirect:'manual',signal:AbortSignal.timeout(15000)});
   if(!response.ok||response.status>=300)throw Error('Threadsの画像をダウンロードできませんでした');
   if(Number(response.headers.get('content-length'))>8*1024*1024)throw Error('画像は8MB以下にしてください');
