@@ -3,7 +3,6 @@
   "main": "src/index.js",
   "vars": { "APP_ROLE": "public" },
   "compatibility_date": "2026-09-28",
-  "r2_buckets": [{ "binding": "IMAGES", "bucket_name": "prompt-archive-images" }],
   "d1_databases": [
     {
       "binding": "DB",
