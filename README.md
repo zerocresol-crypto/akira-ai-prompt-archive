@@ -32,7 +32,7 @@ D1の `series → days → prompts` に `tags` を多対多で結びます。曜
 
 ## 管理画面の接続
 
-管理専用Worker `prompt-archive-admin` の `/admin` だけでシリーズ、曜日、カット、タグを編集する。公開Workerの `/admin` は404。現在の管理WorkerはHTTP Basic認証を使用し、64文字のランダムな16進パスワードをWorker Secret `ADMIN_PASSWORD` へ登録する。ユーザー名は `admin`。Secretが未設定なら管理画面は503になり、誤った資格情報には401を返す。入力した値とSecretの比較にSHA-256を使い、認証情報はHTTPS上で送信する。全ての変更リクエストは同一Originを要求する。
+管理専用Worker `akira-ai-prompt-archive-admin` の `/admin` だけでシリーズ、曜日、カット、タグを編集する。公開Workerの `/admin` は404。現在の管理WorkerはHTTP Basic認証を使用し、64文字のランダムな16進パスワードをWorker Secret `ADMIN_PASSWORD` へ登録する。ユーザー名は `admin`。Secretが未設定なら管理画面は503になり、誤った資格情報には401を返す。入力した値とSecretの比較にSHA-256を使い、認証情報はHTTPS上で送信する。全ての変更リクエストは同一Originを要求する。
 
 セットアップは [DEPLOYMENT.md](DEPLOYMENT.md) を参照。パスワードをソースコードや会話へ載せない。画像はHTTPS画像URLで登録できる。R2有効化後はカット編集画面からの画像アップロードも利用できる。
 
@@ -54,7 +54,6 @@ R2が有効なアカウントでは専用バケット `prompt-archive-images` �
 ## 最初のシリーズ
 
 `0002_seed_autumn_cafe.sql` は「Autumn Café Collection」のシリーズと2026年10月4〜10日の7日分を**下書き**として登録する。各日のモチーフはアップルパイ、モンブラン、焼き芋ブリュレ、葡萄パフェ、パンプキンラテ、秋色コーヒースタンド、総集編。実際の完全版プロンプト・画像は含めない。管理画面でカットを登録し、内容を確認してから個別カットとシリーズを公開する。
-
 # Threads APIから投稿を選ぶ
 
 管理画面の日別ページで「Threadsの最近の投稿から選ぶ」を開くと、投稿済みの `@akira.lether` の最近50件を表示し、朝・夜・総集編の共通Threads URLとして登録できる。選択操作はCUTの公開状態や予約日時を変更しない。予約投稿が公開された後に操作する。候補が50件を超えて古くなった場合は共通URL欄へ直接貼り付ける。
@@ -66,3 +65,5 @@ npx wrangler secret put THREADS_ACCESS_TOKEN --config wrangler.admin.jsonc
 ```
 
 未設定時は投稿候補画面に接続案内を表示し、これまでの手入力は継続して使える。投稿画像の直接URLは保存しない。公開ページは選択した投稿URLをThreads埋め込みとして表示する。
+
+シリーズ管理から「Threadsの画像から表紙を選ぶ」を開くと、最近の自分の画像付き投稿を選び、カルーセル内の画像を1枚ずつ確認して表紙に設定できる。選んだ画像は専用R2バケット `prompt-archive-images` に保存し、シリーズカードと詳細ページへ `/media/art/...` で配信する。管理・公開Workerの両方に `IMAGES` バインドが必要。JPEG・PNG・WebPの8MB以下に対応し、画像のない投稿は選択できない。従来の表紙画像URL入力も利用できる。
