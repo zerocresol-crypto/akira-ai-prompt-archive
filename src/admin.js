@@ -1,7 +1,7 @@
-import { uploadImage } from './images.js';
+import { uploadImage, saveThreadsCover } from './images.js';
 import { template, importDrafts } from './import.js';
 import { normalizeImageReference, threadsUrl, threadsEmbed } from './threads.js';
-import { listOwnThreads } from './threads-api.js';
+import { listOwnThreads, threadImages } from './threads-api.js';
 const esc = (value = '') => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const opts = (items, value) => items.map(([key,name]) => `<option value="${esc(key)}" ${key === value ? 'selected' : ''}>${esc(name)}</option>`).join('');
 const input = (name,title,value='',type='text',required=false) => `<label>${title}<input type="${type}" name="${name}" value="${esc(value)}" ${required?'required':''}></label>`;
@@ -104,6 +104,19 @@ export async function admin(request,env,parts) {
         catch(error){await env.IMAGES.delete(imageUrl.slice('/media/'.length));throw error}
         return redirect(`/admin/series/${encodeURIComponent(parts[2])}/days/${encodeURIComponent(parts[4])}/prompts/edit/${p.id}`);
       }
+      if(parts[1]==='series' && parts[3]==='cover' && parts[4]==='threads' && parts.length===6) {
+        const s=await env.DB.prepare('SELECT id,slug FROM series WHERE slug=?').bind(parts[2]).first();if(!s)return deny('Not Found',404);
+        if(!env.IMAGES||!env.THREADS_ACCESS_TOKEN)throw Error('画像ストレージまたはThreads APIが未設定です');
+        const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
+        if(!posts.some(post=>post.id===parts[5]))throw Error('投稿が最近の一覧に見つかりません。再読み込みしてください');
+        const images=await threadImages(env.THREADS_ACCESS_TOKEN,parts[5],env.THREADS_USERNAME||'akira.lether');
+        const chosen=images.find(image=>image.id===v('image_id'));
+        if(!chosen)throw Error('画像を選び直してください');
+        const imageUrl=await saveThreadsCover(env.IMAGES,chosen.url);
+        try{await env.DB.prepare('UPDATE series SET cover_url=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(imageUrl,s.id).run()}
+        catch(error){await env.IMAGES.delete(imageUrl.slice('/media/'.length));throw error}
+        return redirect(`/admin/series/${encodeURIComponent(s.slug)}`);
+      }
       if(parts[1]==='series' && ['new','edit'].includes(parts[2]) && parts.length===(parts[2]==='edit'?4:3)) {
         if(!validSlug(v('slug'))||!v('title')||v('title').length>200||!validUrl(v('cover_url'))||!validDate(v('start_date'))||!validDate(v('end_date'))||!['draft','published'].includes(v('status')))throw Error('シリーズの入力を確認してください');
         const publishAt=scheduledAt(v('publish_at'));
@@ -168,7 +181,23 @@ export async function admin(request,env,parts) {
   if(parts[1]!=='series')return deny('Not Found',404);
   if(parts[2]==='edit'&&parts.length===4){const s=await env.DB.prepare('SELECT * FROM series WHERE id=?').bind(parts[3]).first();return s?frame('シリーズ編集',`<form method="post">${seriesFields(s)}<button>保存</button></form>`):deny('Not Found',404)}
   const s=await env.DB.prepare('SELECT * FROM series WHERE slug=?').bind(parts[2]).first();if(!s)return deny('Not Found',404);
-  if(parts.length===3){const days=await env.DB.prepare('SELECT * FROM days WHERE series_id=? ORDER BY day_order').bind(s.id).all();return frame(s.title,`<section><p>${esc(s.concept)}</p><a href="/admin/series/edit/${s.id}">シリーズを編集</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/new">日を追加</a></section>${days.results.map(d=>`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}">${esc(d.title)}</a> <small>${esc(d.date||'')}</small></section>`).join('')}`)}
+  if(parts.length===3){const days=await env.DB.prepare('SELECT * FROM days WHERE series_id=? ORDER BY day_order').bind(s.id).all();return frame(s.title,`<section><p>${esc(s.concept)}</p>${s.cover_url?`<img class="preview-image" src="${esc(s.cover_url)}" alt="現在のシリーズ表紙">`:''}<a href="/admin/series/edit/${s.id}">シリーズを編集</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/cover/threads">Threadsの画像から表紙を選ぶ</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/new">日を追加</a></section>${days.results.map(d=>`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}">${esc(d.title)}</a> <small>${esc(d.date||'')}</small></section>`).join('')}`)}
+  if(parts[3]==='cover'&&parts[4]==='threads'&&parts.length===5){
+    const back=`/admin/series/${encodeURIComponent(s.slug)}`;
+    if(!env.IMAGES||!env.THREADS_ACCESS_TOKEN)return frame('シリーズ表紙を選ぶ',`<section><p>画像ストレージまたはThreads APIが未設定です。</p><a href="${back}">シリーズへ戻る</a></section>`);
+    try{const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
+      return frame('表紙にするThreads投稿を選ぶ',`<section><p>${esc(s.title)}の表紙に使う投稿を選択してください。画像の選択・保存は次の画面です。</p><a href="${back}">← シリーズへ戻る</a></section>${posts.filter(post=>['IMAGE','CAROUSEL_ALBUM'].includes(post.mediaType)).map(post=>`<section><p><small>${esc(post.timestamp)} · ${esc(post.mediaType)}</small></p><p>${esc(post.text||'本文なし')}</p><p><a href="${esc(post.permalink)}" target="_blank" rel="noopener noreferrer">Threadsで確認 ↗</a></p><a href="${back}/cover/threads/${encodeURIComponent(post.id)}">この投稿の画像を選ぶ →</a></section>`).join('')||'<section>画像付きの最近の投稿がありません。</section>'}`)
+    }catch(e){return frame('Threads投稿を取得できません',`<section><p>${esc(e.message)}</p><a href="${back}">シリーズへ戻る</a></section>`)}
+  }
+  if(parts[3]==='cover'&&parts[4]==='threads'&&parts.length===6){
+    const back=`/admin/series/${encodeURIComponent(s.slug)}/cover/threads`;
+    if(!env.IMAGES||!env.THREADS_ACCESS_TOKEN)return deny('画像ストレージまたはThreads APIが未設定です',503);
+    try{const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
+      if(!posts.some(post=>post.id===parts[5]))return deny('Not Found',404);
+      const images=await threadImages(env.THREADS_ACCESS_TOKEN,parts[5],env.THREADS_USERNAME||'akira.lether');
+      return frame('シリーズ表紙の画像を選ぶ',`<section><p>${esc(s.title)}のカードに使う画像を1枚選んでください。選択した画像を保存します。</p><a href="${back}">← 投稿一覧に戻る</a></section>${images.map((item,index)=>`<section><img class="preview-image" src="${esc(item.url)}" alt="画像 ${index+1}" loading="lazy"><form method="post"><input type="hidden" name="image_id" value="${esc(item.id)}"><button>画像 ${index+1} を表紙に保存</button></form></section>`).join('')||'<section>この投稿に対応する画像がありません。</section>'}`)
+    }catch(e){return frame('Threads画像を取得できません',`<section><p>${esc(e.message)}</p><a href="${back}">投稿一覧に戻る</a></section>`)}
+  }
   if(parts[3]!=='days')return deny('Not Found',404);
   if(parts[4]==='new'&&parts.length===5)return frame('日別ページ作成',`<form method="post">${dayFields()}<button>保存</button></form>`);
   if(parts[4]==='edit'&&parts.length===6){const d=await env.DB.prepare('SELECT * FROM days WHERE id=? AND series_id=?').bind(parts[5],s.id).first();return d?frame('日別ページ編集',`<form method="post">${dayFields(d)}<button>保存</button></form>`):deny('Not Found',404)}
