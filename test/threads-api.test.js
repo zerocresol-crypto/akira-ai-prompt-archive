@@ -42,4 +42,5 @@ test('cover download validates origin and actual image bytes before storing',asy
   await assert.rejects(saveThreadsCover(bucket,'https://internal.example/image',async()=>new Response(jpeg)),/配信元/);
   await assert.rejects(saveThreadsCover(bucket,'https://scontent.cdninstagram.com/fake',async()=>new Response('not an image')),/画像形式/);
   assert.equal(writes.length,1);
+  assert.equal(await saveThreadsCover(null,'https://scontent.cdninstagram.com/photo.jpg'),'https://scontent.cdninstagram.com/photo.jpg');
 });
