@@ -386,3 +386,14 @@ test('scheduled series and cuts stay hidden until their JST publication time',as
     assert.match(await (await worker.fetch(get('/tags/autumn'),env)).text(),/予約Cut/);
   } finally {auth.restore()}
 });
+
+
+test('expired Threads media covers use the original text artwork',async()=>{
+  const DB=database(),env=envFor(DB);
+  DB.prepare('INSERT INTO series(slug,title,concept,cover_url,status) VALUES(?,?,?,?,?)').bind('expired-cover','秋夜幻想','月灯りの物語','https://scontent.xx.fbcdn.net/v/t1.0/expired.jpg?token=old','published').run();
+  for(const path of ['/','/series','/series/expired-cover']){
+    const html=await (await worker.fetch(get(path),env)).text();
+    assert.doesNotMatch(html,/scontent\.xx\.fbcdn\.net/);
+    if(path!=='/series/expired-cover')assert.match(html,/class="series-art"/);
+  }
+});
