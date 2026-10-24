@@ -106,6 +106,7 @@ export async function admin(request,env,parts) {
       }
       if(parts[1]==='series' && parts[3]==='cover' && parts[4]==='threads' && parts.length===6) {
         const s=await env.DB.prepare('SELECT id,slug FROM series WHERE slug=?').bind(parts[2]).first();if(!s)return deny('Not Found',404);
+        if(!env.IMAGES)throw Error('画像ストレージが未設定のため、Threads画像は表紙に保存できません');
         if(!env.THREADS_ACCESS_TOKEN)throw Error('Threads APIが未設定です');
         const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
         if(!posts.some(post=>post.id===parts[5]))throw Error('投稿が最近の一覧に見つかりません。再読み込みしてください');
@@ -181,8 +182,9 @@ export async function admin(request,env,parts) {
   if(parts[1]!=='series')return deny('Not Found',404);
   if(parts[2]==='edit'&&parts.length===4){const s=await env.DB.prepare('SELECT * FROM series WHERE id=?').bind(parts[3]).first();return s?frame('シリーズ編集',`<form method="post">${seriesFields(s)}<button>保存</button></form>`):deny('Not Found',404)}
   const s=await env.DB.prepare('SELECT * FROM series WHERE slug=?').bind(parts[2]).first();if(!s)return deny('Not Found',404);
-  if(parts.length===3){const days=await env.DB.prepare('SELECT * FROM days WHERE series_id=? ORDER BY day_order').bind(s.id).all();return frame(s.title,`<section><p>${esc(s.concept)}</p>${s.cover_url?`<img class="preview-image" src="${esc(s.cover_url)}" alt="現在のシリーズ表紙">`:''}<a href="/admin/series/edit/${s.id}">シリーズを編集</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/cover/threads">Threadsの画像から表紙を選ぶ</a> · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/new">日を追加</a></section>${days.results.map(d=>`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}">${esc(d.title)}</a> <small>${esc(d.date||'')}</small></section>`).join('')}`)}
+  if(parts.length===3){const days=await env.DB.prepare('SELECT * FROM days WHERE series_id=? ORDER BY day_order').bind(s.id).all();return frame(s.title,`<section><p>${esc(s.concept)}</p>${s.cover_url?`<img class="preview-image" src="${esc(s.cover_url)}" alt="現在のシリーズ表紙">`:''}<a href="/admin/series/edit/${s.id}">シリーズを編集</a>${env.IMAGES?' · <a href="/admin/series/'+encodeURIComponent(s.slug)+'/cover/threads">Threadsの画像から表紙を選ぶ</a>':''} · <a href="/admin/series/${encodeURIComponent(s.slug)}/days/new">日を追加</a></section>${days.results.map(d=>`<section><a href="/admin/series/${encodeURIComponent(s.slug)}/days/${encodeURIComponent(d.slug)}">${esc(d.title)}</a> <small>${esc(d.date||'')}</small></section>`).join('')}`)}
   if(parts[3]==='cover'&&parts[4]==='threads'&&parts.length===5){
+     if(!env.IMAGES)return deny('画像ストレージが未設定です',404);
     const back=`/admin/series/${encodeURIComponent(s.slug)}`;
     if(!env.THREADS_ACCESS_TOKEN)return frame('シリーズ表紙を選ぶ',`<section><p>Threads APIが未設定です。</p><a href="${back}">シリーズへ戻る</a></section>`);
     try{const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
@@ -190,6 +192,7 @@ export async function admin(request,env,parts) {
     }catch(e){return frame('Threads投稿を取得できません',`<section><p>${esc(e.message)}</p><a href="${back}">シリーズへ戻る</a></section>`)}
   }
   if(parts[3]==='cover'&&parts[4]==='threads'&&parts.length===6){
+     if(!env.IMAGES)return deny('画像ストレージが未設定です',404);
     const back=`/admin/series/${encodeURIComponent(s.slug)}/cover/threads`;
     if(!env.THREADS_ACCESS_TOKEN)return deny('Threads APIが未設定です',503);
     try{const posts=await listOwnThreads(env.THREADS_ACCESS_TOKEN,env.THREADS_USERNAME||'akira.lether');
